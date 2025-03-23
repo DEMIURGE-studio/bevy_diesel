@@ -1,3 +1,2 @@
 # Bevy Diesel
-
-Bevy Diesel is in imagining of the Gameplay Ability System for the bevy game engine.
+bevy_diesel is a general purpose ability system. An analogous tool would be UE5's GAS. bevy_diesel provides the user with a strong foundation to create reusable "parts" of abilities, with the goal of eventually being able to author entire abilities entirely in data.
