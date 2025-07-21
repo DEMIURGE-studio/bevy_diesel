@@ -2,27 +2,30 @@
 #![feature(associated_type_defaults)]
 
 use std::time::Duration;
-
 use bevy::{platform::collections::HashSet, prelude::*};
 pub use bevy_diesel_macros::cue;
+
+pub mod avian3d;
+pub mod backend;
+pub mod invoker;
+pub mod random;
+
+pub enum RelativeTo {
+    Invoker, // The entity that invoked the effect
+    Root, // The root entity of the effect
+    InvokerTarget, // The target of the entity that invoked the effect
+    CueTarget, // The target passed in via the cue
+    Origin, // The target intially passed in to the generate_targets function. Not used for spawning.
+}
 
 /// A trait that represents the target type used by the ability system.
 /// Usually, only one EffectTarget implmentation is used in a project.
 pub trait EffectTarget: Clone + Send + Sync + 'static { }
 
-/// Default target implementation.
-#[derive(Clone, Component)]
-pub struct Target {
-    pub entity: Option<Entity>,
-    pub position: Vec3,
-}
-
-impl EffectTarget for Target { }
-
 /// Cues are events that are triggered against a target, and they propagate
 /// to the children of that target. Cues are 
 pub trait Cue: Event + Clone {
-    type Target: EffectTarget + Send + Sync + 'static + Clone = Target;
+    type Target: EffectTarget + Send + Sync + 'static + Clone = Self::Target;
 
     fn from_target(target: Self::Target) -> Self;
     fn get_target(&self) -> &Self::Target;
@@ -78,14 +81,6 @@ impl PropagationBlockers {
     pub fn remove_blocker(&mut self, blocker: String) {
         self.0.remove(&blocker);
     }
-}
-
-pub struct SpawnConfig {
-
-}
-
-pub struct TargetConfig {
-
 }
 
 #[derive(Component)]
