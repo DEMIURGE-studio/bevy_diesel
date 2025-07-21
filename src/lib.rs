@@ -46,7 +46,7 @@ pub struct PropagationBlockers(pub HashSet<String>);
 
 impl PropagationBlockers {
     pub fn is_blocked(&self) -> bool {
-        self.0.is_empty()
+        !self.0.is_empty()
     }
 
     pub fn add_blocker(&mut self, blocker: String) {
