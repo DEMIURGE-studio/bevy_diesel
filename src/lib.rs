@@ -3,12 +3,7 @@
 
 use bevy::{platform::collections::HashSet, prelude::*};
 
-pub trait EffectTarget: Sized + Send + Sync + 'static + Clone {
-    type Position: Send + Sync + 'static + Clone;
-
-    fn from_position(position: Self::Position) -> Self;
-    fn from_entity(entity: Entity, position: Self::Position) -> Self;
-}
+pub trait EffectTarget { }
 
 pub trait Cue: Event + Clone {
     type Target: EffectTarget = Target;
@@ -69,14 +64,4 @@ pub struct Target {
     pub position: Vec3,
 }
 
-impl EffectTarget for Target {
-    type Position = Vec3;
-
-    fn from_position(position: Self::Position) -> Self {
-        todo!()
-    }
-
-    fn from_entity(entity: Entity, position: Self::Position) -> Self {
-        todo!()
-    }
-}
+impl EffectTarget for Target { }
