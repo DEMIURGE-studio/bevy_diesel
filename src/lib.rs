@@ -1,11 +1,22 @@
 #![allow(incomplete_features)]
 #![feature(associated_type_defaults)]
 
+use std::time::Duration;
+
 use bevy::{platform::collections::HashSet, prelude::*};
 
 /// A trait that represents the target type used by the ability system.
 /// Usually, only one EffectTarget implmentation is used in a project.
-pub trait EffectTarget { }
+pub trait EffectTarget: Clone + Send + Sync + 'static { }
+
+/// Default target implementation.
+#[derive(Clone, Component)]
+pub struct Target {
+    pub entity: Option<Entity>,
+    pub position: Vec3,
+}
+
+impl EffectTarget for Target { }
 
 /// Cues are events that are triggered against a target, and they propagate
 /// to the children of that target. Cues are 
@@ -19,7 +30,7 @@ pub trait Cue: Event + Clone {
 /// An event that is triggered when a cue is triggered against an entity
 /// that has the corresponding listener component.
 #[derive(Event, Clone)]
-pub struct GoOff<T: EffectTarget>(pub T);
+pub struct TriggerEffect<T: EffectTarget>(pub T);
 
 pub fn propagate_cue<C, L>(
     trigger: Trigger<C>,
@@ -38,9 +49,9 @@ pub fn propagate_cue<C, L>(
             }
         }
 
-        // If the target has an appropriate listener, trigger the GoOff event against it.
+        // If the target has an appropriate listener, trigger the TriggerEffect event against it.
         if listener_query.contains(entity) {
-            commands.trigger_targets(GoOff(event.get_target().clone()), entity);
+            commands.trigger_targets(TriggerEffect(event.get_target().clone()), entity);
         }
 
         // If the target has children, trigger the cue against each child.
@@ -60,19 +71,96 @@ impl PropagationBlockers {
     }
 
     pub fn add_blocker(&mut self, blocker: String) {
-
+        self.0.insert(blocker);
     }
 
     pub fn remove_blocker(&mut self, blocker: String) {
-        
+        self.0.remove(&blocker);
     }
 }
 
-/// Default target implementation.
-#[derive(Clone)]
-pub struct Target {
-    pub entity: Option<Entity>,
-    pub position: Vec3,
+pub struct SpawnConfig {
+
 }
 
-impl EffectTarget for Target { }
+pub struct TargetConfig {
+
+}
+
+#[derive(Component)]
+pub struct Repeater {
+    pub interval: Duration,
+    pub count: Option<u32>,
+    pub duration: Option<Duration>,
+}
+
+#[derive(Component, Default)]
+pub struct Dormant;
+
+#[derive(Component)]
+pub struct Repeating {
+    pub elapsed_from_trigger: Duration,
+    pub elapsed_from_start: Duration,
+    // count?
+    // duration?
+}
+
+#[derive(Event, Clone)]
+pub struct StartRepeatCue<T: EffectTarget>(pub T);
+
+impl<T: EffectTarget> Cue for StartRepeatCue<T> {
+    type Target = T;
+
+    fn from_target(target: Self::Target) -> Self {
+        StartRepeatCue(target)
+    }
+
+    fn get_target(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// TODO a derive macro for Cue. #[cue(Target = Target)] or #[cue] for the default target. 
+
+#[derive(Event, Clone)]
+pub struct OnRepeatCue<T: EffectTarget>(pub T);
+
+impl<T: EffectTarget> Cue for OnRepeatCue<T> {
+    type Target = T;
+
+    fn from_target(target: Self::Target) -> Self {
+        OnRepeatCue(target)
+    }
+
+    fn get_target(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Event, Clone)]
+pub struct StopRepeatCue<T: EffectTarget>(pub T);
+
+impl<T: EffectTarget> Cue for StopRepeatCue<T> {
+    type Target = T;
+
+    fn from_target(target: Self::Target) -> Self {
+        StopRepeatCue(target)
+    }
+
+    fn get_target(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Event, Clone)]
+pub struct ExampleCue(pub Target);
+
+impl Cue for ExampleCue {
+    fn from_target(target: Self::Target) -> Self {
+        todo!()
+    }
+
+    fn get_target(&self) -> &Self::Target {
+        todo!()
+    }
+}
