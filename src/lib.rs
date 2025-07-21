@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use bevy::{platform::collections::HashSet, prelude::*};
+pub use bevy_diesel_macros::cue;
 
 /// A trait that represents the target type used by the ability system.
 /// Usually, only one EffectTarget implmentation is used in a project.
@@ -105,62 +106,14 @@ pub struct Repeating {
     // duration?
 }
 
+#[cue]
 #[derive(Event, Clone)]
 pub struct StartRepeatCue<T: EffectTarget>(pub T);
 
-impl<T: EffectTarget> Cue for StartRepeatCue<T> {
-    type Target = T;
-
-    fn from_target(target: Self::Target) -> Self {
-        StartRepeatCue(target)
-    }
-
-    fn get_target(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-// TODO a derive macro for Cue. #[cue(Target = Target)] or #[cue] for the default target. 
-
+#[cue]
 #[derive(Event, Clone)]
 pub struct OnRepeatCue<T: EffectTarget>(pub T);
 
-impl<T: EffectTarget> Cue for OnRepeatCue<T> {
-    type Target = T;
-
-    fn from_target(target: Self::Target) -> Self {
-        OnRepeatCue(target)
-    }
-
-    fn get_target(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
+#[cue]
 #[derive(Event, Clone)]
 pub struct StopRepeatCue<T: EffectTarget>(pub T);
-
-impl<T: EffectTarget> Cue for StopRepeatCue<T> {
-    type Target = T;
-
-    fn from_target(target: Self::Target) -> Self {
-        StopRepeatCue(target)
-    }
-
-    fn get_target(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Event, Clone)]
-pub struct ExampleCue(pub Target);
-
-impl Cue for ExampleCue {
-    fn from_target(target: Self::Target) -> Self {
-        todo!()
-    }
-
-    fn get_target(&self) -> &Self::Target {
-        todo!()
-    }
-}
