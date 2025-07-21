@@ -3,44 +3,54 @@
 
 use bevy::{platform::collections::HashSet, prelude::*};
 
+/// A trait that represents the target type used by the ability system.
+/// Usually, only one EffectTarget implmentation is used in a project.
 pub trait EffectTarget { }
 
+/// Cues are events that are triggered against a target, and they propagate
+/// to the children of that target. Cues are 
 pub trait Cue: Event + Clone {
-    type Target: EffectTarget = Target;
+    type Target: EffectTarget + Send + Sync + 'static + Clone = Target;
 
     fn from_target(target: Self::Target) -> Self;
-    fn get_target(&self) -> Self::Target;
+    fn get_target(&self) -> &Self::Target;
 }
+
+/// An event that is triggered when a cue is triggered against an entity
+/// that has the corresponding listener component.
+#[derive(Event, Clone)]
+pub struct GoOff<T: EffectTarget>(pub T);
 
 pub fn propagate_cue<C, L>(
     trigger: Trigger<C>,
     children_query: Query<(Option<&PropagationBlockers>, &Children)>,
     listener_query: Query<&L>,
     mut commands: Commands,
-) where C: Cue, L: Component {
+) where C: Cue + Clone, L: Component {
     let entity = trigger.target();
     let event = trigger.event();
 
     if let Ok((propagation_blockers, children)) = children_query.get(entity) {
-        // If there is a blocker, don't propagate the cue.
-        let Some(propagation_blockers) = propagation_blockers else{
-            return;
-        };
-
-        if propagation_blockers.is_blocked() {
-            return;
-        }
-
-        for child in children.iter() {
-            if listener_query.contains(child) {
+        // If the target is blocked, don't propagate the cue.
+        if let Some(propagation_blockers) = propagation_blockers {
+            if propagation_blockers.is_blocked() {
                 return;
             }
+        }
 
+        // If the target has an appropriate listener, trigger the GoOff event against it.
+        if listener_query.contains(entity) {
+            commands.trigger_targets(GoOff(event.get_target().clone()), entity);
+        }
+
+        // If the target has children, trigger the cue against each child.
+        for child in children.iter() {
             commands.trigger_targets(event.clone(), child);
         }
     }
 }
 
+/// A component that aggregates the different block conditions for an effect.
 #[derive(Component)]
 pub struct PropagationBlockers(pub HashSet<String>);
 
@@ -58,6 +68,7 @@ impl PropagationBlockers {
     }
 }
 
+/// Default target implementation.
 #[derive(Clone)]
 pub struct Target {
     pub entity: Option<Entity>,
