@@ -14,6 +14,7 @@ pub enum TargetType {
 pub enum Offset {
     None,
     Fixed(Vec3),
+    Relative(Vec3),
 }
 
 pub enum Shape {
@@ -35,7 +36,7 @@ pub struct Avian3DTargetGeneratorConfig {
 }
 
 /// Targets in 3d space will always have a position but may not have an entity.
-#[derive(Clone, Component)]
+#[derive(Clone, Component, Debug)]
 pub struct Avian3DTarget {
     pub entity: Option<Entity>,
     pub position: Vec3,
@@ -43,11 +44,17 @@ pub struct Avian3DTarget {
 
 impl Avian3DTarget {
     fn from_entity(entity: Entity, position: Vec3) -> Self {
-        todo!()
+        Self {
+            entity: Some(entity),
+            position,
+        }
     }
 
     fn from_position(position: Vec3) -> Self {
-        todo!()
+        Self {
+            entity: None,
+            position,
+        }
     }
 }
 
@@ -98,12 +105,20 @@ impl<'w, 's> SpatialBackend for Avian3DSpatialBackend<'w, 's> {
                 let position = initial_target.position + vec3;
                 Avian3DTarget::from_position(position)
             },
+            Offset::Relative(vec3) => {
+                let transform = initial_target.entity.and_then(|e| self.transform_query.get(e).ok());
+                let position = match transform {
+                    Some(t) => initial_target.position + t.rotation.mul_vec3(vec3),
+                    None => initial_target.position + vec3,
+                };
+                Avian3DTarget::from_position(position)
+            }
         };
 
         let number = match config.number {
             Number::Fixed(n) => n,
             Number::RandomRange(min, max) => {
-                min // TODO
+                rng.usize_in_range(min..=max)
             }
         };
 

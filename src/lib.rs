@@ -8,6 +8,7 @@ pub use bevy_diesel_macros::cue;
 pub mod avian3d;
 pub mod backend;
 pub mod invoker;
+pub mod node_context;
 pub mod random;
 
 pub enum RelativeTo {
