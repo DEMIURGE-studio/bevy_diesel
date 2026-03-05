@@ -1,7 +1,6 @@
 [package]
-name = "bevy_diesel"
+name = "bevy_diesel_avian3d_backend"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.18.0"
