@@ -1,0 +1,11 @@
+[package]
+name = "diesel_avian3d"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy_diesel = { path = "../.." }
+bevy = "0.18.0"
+avian3d = "0.5"
+rand = "0.9"
+bevy_gearbox = { path = "../../../bevy_gearbox" }
