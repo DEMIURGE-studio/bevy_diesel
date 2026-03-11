@@ -314,6 +314,25 @@ impl Plugin for AvianDieselPlugin {
 }
 
 // ---------------------------------------------------------------------------
+// Concrete Vec3 spawn observer helpers
+// ---------------------------------------------------------------------------
+
+/// Forward OnSpawnOrigin<Vec3> to GoOff. Use with `.observe(on_spawn_origin)`.
+pub fn on_spawn_origin(ev: On<bevy_diesel::spawn::OnSpawnOrigin<Vec3>>, mut commands: Commands) {
+    bevy_diesel::spawn::on_spawn_origin::<Vec3>(ev, commands);
+}
+
+/// Forward OnSpawnTarget<Vec3> to GoOff. Use with `.observe(on_spawn_target)`.
+pub fn on_spawn_target(ev: On<bevy_diesel::spawn::OnSpawnTarget<Vec3>>, mut commands: Commands) {
+    bevy_diesel::spawn::on_spawn_target::<Vec3>(ev, commands);
+}
+
+/// Forward OnSpawnInvoker<Vec3> to GoOff. Use with `.observe(on_spawn_invoker)`.
+pub fn on_spawn_invoker(ev: On<bevy_diesel::spawn::OnSpawnInvoker<Vec3>>, mut commands: Commands) {
+    bevy_diesel::spawn::on_spawn_invoker::<Vec3>(ev, commands);
+}
+
+// ---------------------------------------------------------------------------
 // Spatial query helpers
 // ---------------------------------------------------------------------------
 
