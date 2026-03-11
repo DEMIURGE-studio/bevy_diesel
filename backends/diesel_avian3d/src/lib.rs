@@ -12,7 +12,6 @@ use bevy_diesel::prelude::*;
 pub use bevy_diesel;
 
 pub mod collision;
-pub mod spawn;
 
 pub mod prelude {
     // Re-export everything from diesel core (includes gauge, gearbox, bevy_gauge, bevy_gearbox)
@@ -26,13 +25,14 @@ pub mod prelude {
     // Collision trigger events
     pub use crate::collision::{CollidedEntity, CollidedPosition};
 
-    // Spawn events + observer helpers
-    pub use crate::spawn::{
-        OnSpawnOrigin, OnSpawnTarget, OnSpawnInvoker,
-        on_spawn_origin, on_spawn_target, on_spawn_invoker,
-    };
+    // Spawn events — Vec3 aliases of the generic core types.
+    // on_spawn_origin/target/invoker are re-exported via bevy_diesel::prelude::*
+    pub type OnSpawnOrigin = bevy_diesel::spawn::OnSpawnOrigin<bevy::math::Vec3>;
+    pub type OnSpawnTarget = bevy_diesel::spawn::OnSpawnTarget<bevy::math::Vec3>;
+    pub type OnSpawnInvoker = bevy_diesel::spawn::OnSpawnInvoker<bevy::math::Vec3>;
 
     // Backend type aliases — users import these instead of the generic types
+    pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
     pub type Target = bevy_diesel::target::Target<bevy::math::Vec3>;
     pub type GoOff = bevy_diesel::effect::GoOff<bevy::math::Vec3>;
     pub type TargetType = bevy_diesel::target::TargetType<bevy::math::Vec3>;
@@ -182,6 +182,20 @@ impl SpatialBackend for AvianBackend {
 
         targets
     }
+
+    fn spawn_transform(
+        world_pos: Vec3,
+        parent: Option<Entity>,
+        q_global_transform: &Query<&GlobalTransform>,
+    ) -> Transform {
+        if let Some(parent_entity) = parent {
+            if let Ok(parent_gt) = q_global_transform.get(parent_entity) {
+                let local_pos = parent_gt.affine().inverse().transform_point3(world_pos);
+                return Transform::from_translation(local_pos);
+            }
+        }
+        Transform::from_translation(world_pos)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -286,11 +300,16 @@ pub struct AvianDieselPlugin;
 
 impl Plugin for AvianDieselPlugin {
     fn build(&self, app: &mut App) {
+        use bevy_diesel::spawn::{OnSpawnOrigin, OnSpawnTarget, OnSpawnInvoker, spawn_observer};
+        use bevy_gearbox::RegistrationAppExt;
         app.init_resource::<bevy_diesel::spawn::TemplateRegistry>()
             .add_observer(propagate_observer::<AvianBackend>)
-            .add_observer(bevy_diesel::print::print_effect::<Vec3>);
+            .add_observer(bevy_diesel::print::print_effect::<Vec3>)
+            .add_observer(spawn_observer::<AvianBackend>)
+            .register_transition::<OnSpawnOrigin<Vec3>>()
+            .register_transition::<OnSpawnTarget<Vec3>>()
+            .register_transition::<OnSpawnInvoker<Vec3>>();
         collision::plugin(app);
-        spawn::plugin(app);
     }
 }
 

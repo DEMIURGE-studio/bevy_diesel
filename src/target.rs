@@ -6,6 +6,29 @@ use bevy::prelude::*;
 use crate::backend::SpatialBackend;
 
 // ---------------------------------------------------------------------------
+// InvokerTarget<P>
+// ---------------------------------------------------------------------------
+
+/// The invoker's current target — who/where it is aiming at.
+/// Placed on character/AI entities so the pipeline can resolve
+/// `TargetType::InvokerTarget` without conflating it with per-effect `Target<P>`.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct InvokerTarget<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
+    pub entity: Option<Entity>,
+    pub position: P,
+}
+
+impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> InvokerTarget<P> {
+    pub fn entity(entity: Entity, position: P) -> Self {
+        Self { entity: Some(entity), position }
+    }
+
+    pub fn position(position: P) -> Self {
+        Self { entity: None, position }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Target<P>
 // ---------------------------------------------------------------------------
 
@@ -40,6 +63,12 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Target<P> {
             entity: None,
             position,
         }
+    }
+}
+
+impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> From<InvokerTarget<P>> for Target<P> {
+    fn from(it: InvokerTarget<P>) -> Self {
+        Target { entity: it.entity, position: it.position }
     }
 }
 

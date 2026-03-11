@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use bevy::ecs::system::SystemParam;
-use bevy::prelude::Entity;
+use bevy::prelude::*;
 
 use crate::target::Target;
 
@@ -19,7 +19,7 @@ use crate::target::Target;
 /// in their context without requiring interior mutability.
 pub trait SpatialBackend: Send + Sync + 'static {
     /// The position representation (Vec3, Vec2, IVec2, usize, etc.)
-    type Pos: Clone + Copy + Send + Sync + Default + Debug + 'static;
+    type Pos: Clone + Copy + Send + Sync + Default + Debug + bevy::reflect::TypePath + 'static;
 
     /// Backend-specific offset configuration (e.g. `Vec3Offset`, `GridOffset`)
     type Offset: Clone + Send + Sync + Default + Debug + 'static;
@@ -78,4 +78,12 @@ pub trait SpatialBackend: Send + Sync + 'static {
         invoker: Entity,
         origin: Self::Pos,
     ) -> Vec<Target<Self::Pos>>;
+
+    /// Compute the `Transform` to use when spawning an entity at `world_pos`.
+    /// If `parent` is provided, returns a local-space transform relative to that entity.
+    fn spawn_transform(
+        world_pos: Self::Pos,
+        parent: Option<Entity>,
+        q_global_transform: &Query<&GlobalTransform>,
+    ) -> Transform;
 }

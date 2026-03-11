@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::backend::SpatialBackend;
 use crate::effect::{GoOff, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
-use crate::target::{Target, TargetGenerator, TargetMutator, TargetType};
+use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
 /// Core pipeline function: resolve → offset → gather.
 ///
@@ -76,7 +76,7 @@ pub fn propagate_observer<B: SpatialBackend>(
     q_target_mutator: Query<Option<&TargetMutator<B>>>,
     q_invoker: Query<&InvokedBy>,
     q_child_of: Query<&ChildOf>,
-    q_target: Query<&Target<B::Pos>>,
+    q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut commands: Commands,
 ) {
     let parent = go_off.entity;
@@ -90,7 +90,7 @@ pub fn propagate_observer<B: SpatialBackend>(
     let invoker = resolve_invoker(&q_invoker, parent);
     let root = resolve_root(&q_child_of, parent);
 
-    let invoker_target = q_target.get(invoker).copied().unwrap_or_default();
+    let invoker_target: Target<B::Pos> = q_invoker_target.get(invoker).copied().map(Target::from).unwrap_or_default();
 
     // For each sub-effect child, apply MapEach propagation
     for &child in subs.into_iter() {

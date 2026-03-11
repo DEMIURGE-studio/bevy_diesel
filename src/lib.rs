@@ -18,7 +18,7 @@ pub mod prelude {
     pub use crate::backend::SpatialBackend;
 
     // Core target types (generic — backends alias these)
-    pub use crate::target::{Target, TargetGenerator, TargetMutator, TargetType};
+    pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
     // Effect tree
     pub use crate::effect::{GoOff, SubEffectOf, SubEffects};
@@ -33,7 +33,11 @@ pub mod prelude {
     pub use crate::print::PrintLn;
 
     // Spawn
-    pub use crate::spawn::{SpawnConfig, TemplateRegistry};
+    pub use crate::spawn::{
+        OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
+        SpawnConfig, TemplateRegistry, spawn_observer,
+        on_spawn_invoker, on_spawn_origin, on_spawn_target,
+    };
 
     // Utility types and functions
     pub use crate::filters::{
