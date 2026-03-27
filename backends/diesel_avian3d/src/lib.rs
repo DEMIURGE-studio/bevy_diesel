@@ -25,11 +25,13 @@ pub mod prelude {
     // Collision trigger events
     pub use crate::collision::{CollidedEntity, CollidedPosition};
 
-    // Spawn events — Vec3 aliases of the generic core types.
-    // on_spawn_origin/target/invoker are re-exported via bevy_diesel::prelude::*
+    // Spawn events — Vec3 aliases of the generic core types
     pub type OnSpawnOrigin = bevy_diesel::spawn::OnSpawnOrigin<bevy::math::Vec3>;
     pub type OnSpawnTarget = bevy_diesel::spawn::OnSpawnTarget<bevy::math::Vec3>;
     pub type OnSpawnInvoker = bevy_diesel::spawn::OnSpawnInvoker<bevy::math::Vec3>;
+
+    // Concrete Vec3 spawn observer helpers — use with .observe(on_spawn_origin) etc.
+    pub use crate::{on_spawn_origin, on_spawn_target, on_spawn_invoker};
 
     // Backend type aliases — users import these instead of the generic types
     pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
