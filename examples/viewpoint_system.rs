@@ -12,7 +12,7 @@
 //! from their own perspective. For example, a "thorns" PAE subscribes to HitDD
 //! (defender was hit) while a "life steal" PAE subscribes to HitAD (attacker hit defender).
 //!
-//! This is a PATTERN — copy and adapt it for your event types.
+//! This is a PATTERN - copy and adapt it for your event types.
 
 use bevy::{ecs::event::SetEntityEventTarget, prelude::*};
 use bevy_diesel::submit_propagation_for;
@@ -83,7 +83,7 @@ submit_propagation_for!(HitDA);
 submit_propagation_for!(HitDD);
 
 // ============================================================================
-// Step 3: Forwarding observer — splits base event into 4 variants
+// Step 3: Forwarding observer - splits base event into 4 variants
 // ============================================================================
 
 /// Generic forwarder: observes a base event and emits the 4 viewpoint variants.
@@ -123,7 +123,7 @@ fn forward_hit_viewpoints(
 }
 
 // ============================================================================
-// Step 4: Example subscriber — "thorns" effect reacts to being hit
+// Step 4: Example subscriber - "thorns" effect reacts to being hit
 // ============================================================================
 
 #[derive(Component)]

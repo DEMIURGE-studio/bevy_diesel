@@ -7,7 +7,7 @@
 //! using `submit_propagation_for!`. Defense observers intercept Hit events and
 //! may absorb them (preventing Damage) or let them through.
 //!
-//! This is a PATTERN — copy and adapt it. Diesel provides the propagation infrastructure;
+//! This is a PATTERN - copy and adapt it. Diesel provides the propagation infrastructure;
 //! you define the events, defense formulas, and resolution logic.
 
 use bevy::{ecs::event::SetEntityEventTarget, prelude::*};
@@ -124,7 +124,7 @@ fn resolve_hit(
     }
 
     if remaining <= 0.0 {
-        // Attack was fully absorbed — don't emit Damage
+        // Attack was fully absorbed - don't emit Damage
         info!("Attack absorbed by armor");
         return;
     }
@@ -185,7 +185,7 @@ impl Plugin for DamagePipelinePlugin {
 }
 
 fn main() {
-    // This example demonstrates the pattern — in a real app you'd add AvianDieselPlugin,
+    // This example demonstrates the pattern - in a real app you'd add AvianDieselPlugin,
     // DamagePipelinePlugin, spawn entities with Health/Armor, and trigger Attack events.
     App::new()
         .add_plugins(MinimalPlugins)

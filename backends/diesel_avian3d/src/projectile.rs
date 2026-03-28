@@ -5,15 +5,11 @@ use crate::ballistics::calculate_low_angle_velocity_with_speed;
 use crate::prelude::Target;
 
 // ---------------------------------------------------------------------------
-// ProjectileEffect — physics-driven ballistic arc
+// ProjectileEffect - physics-driven ballistic arc
 // ---------------------------------------------------------------------------
 
-/// Ballistic projectile. Flies in an arc using Avian physics.
-/// When a `Target` is added, calculates initial velocity using the ballistic
-/// equations and Avian's `Gravity` resource.
-///
-/// Without a `Target`, the projectile simply falls under gravity (useful for
-/// firestorm-style drops).
+/// Ballistic projectile. Calculates launch velocity from `Target` and `Gravity`.
+/// Without a `Target`, just falls.
 #[derive(Component, Clone, Debug, Reflect)]
 #[require(Sensor, CollisionEventsEnabled, RigidBody::Dynamic, Collider::sphere(0.2), Mass(1.0))]
 pub struct ProjectileEffect {
@@ -33,11 +29,10 @@ impl ProjectileEffect {
 }
 
 // ---------------------------------------------------------------------------
-// LinearProjectileEffect — straight-line constant speed
+// LinearProjectileEffect - straight-line constant speed
 // ---------------------------------------------------------------------------
 
-/// Linear projectile. Moves in a straight line at constant speed, ignoring gravity.
-/// Requires a `Target` to determine direction.
+/// Straight-line projectile at constant speed, ignoring gravity.
 #[derive(Component, Clone, Debug, Reflect)]
 #[require(Sensor, CollisionEventsEnabled, RigidBody::Kinematic, Collider::sphere(0.2))]
 pub struct LinearProjectileEffect {
@@ -56,7 +51,7 @@ impl LinearProjectileEffect {
     }
 }
 
-/// Runtime component inserted when a linear projectile gets its target.
+/// Inserted when a linear projectile receives its `Target`.
 #[derive(Component)]
 pub struct LinearProjectile {
     pub direction: Vec3,
@@ -78,7 +73,7 @@ impl Plugin for ProjectilePlugin {
 }
 
 // ---------------------------------------------------------------------------
-// Ballistic — set velocity when Target is added
+// Ballistic - set velocity when Target is added
 // ---------------------------------------------------------------------------
 
 fn init_ballistic_target(
@@ -106,7 +101,7 @@ fn init_ballistic_target(
 }
 
 // ---------------------------------------------------------------------------
-// Linear — calculate direction and insert runtime component
+// Linear - calculate direction and insert runtime component
 // ---------------------------------------------------------------------------
 
 fn init_linear_target(

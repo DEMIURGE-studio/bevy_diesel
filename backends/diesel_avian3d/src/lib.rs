@@ -5,9 +5,7 @@ use rand::RngCore;
 
 use bevy_diesel::prelude::*;
 
-// ---------------------------------------------------------------------------
-// Re-export the diesel ecosystem — users only need this crate
-// ---------------------------------------------------------------------------
+// Re-exports
 
 pub use bevy_diesel;
 
@@ -17,35 +15,20 @@ pub mod projectile;
 pub mod velocity;
 
 pub mod prelude {
-    // Re-export everything from diesel core (includes gauge, gearbox, bevy_gauge, bevy_gearbox)
     pub use bevy_diesel::prelude::*;
-
-    // Backend-specific types
-    pub use crate::{
-        AvianBackend, AvianFilter, AvianGatherer, Vec3Offset,
-    };
-
-    // Collision
+    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
     pub use crate::collision::CollisionFilterPlugin;
-
-    // Ballistics
     pub use crate::ballistics::{
         calculate_low_angle_velocity_with_speed, calculate_high_angle_velocity_with_speed,
         calculate_velocity_with_speed, distance_lock,
     };
-
-    // Projectile effects
     pub use crate::projectile::{
         ProjectileEffect, LinearProjectileEffect, LinearProjectile, ProjectilePlugin,
     };
-
-    // Velocity effect
     pub use crate::velocity::{VelocityEffect, Trajectory, VelocityEffectPlugin};
-
-    // Concrete Vec3 spawn observer helpers — use with .observe(on_spawn_origin) etc.
     pub use crate::{on_spawn_origin, on_spawn_target, on_spawn_invoker};
 
-    // Backend type aliases — users import these instead of the generic types
+    // Vec3 type aliases
     pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
     pub type Target = bevy_diesel::target::Target<bevy::math::Vec3>;
     pub type GoOff = bevy_diesel::effect::GoOff<bevy::math::Vec3>;
@@ -63,7 +46,7 @@ pub mod prelude {
 }
 
 // ---------------------------------------------------------------------------
-// AvianContext — backend runtime queries + RNG bundled as a SystemParam
+// AvianContext - backend runtime queries + RNG bundled as a SystemParam
 // ---------------------------------------------------------------------------
 
 #[derive(SystemParam)]
@@ -74,7 +57,7 @@ pub struct AvianContext<'w, 's> {
 }
 
 // ---------------------------------------------------------------------------
-// AvianBackend — SpatialBackend implementation
+// AvianBackend - SpatialBackend implementation
 // ---------------------------------------------------------------------------
 
 pub struct AvianBackend;
@@ -105,7 +88,7 @@ impl SpatialBackend for AvianBackend {
         exclude: Entity,
     ) -> Vec<bevy_diesel::target::Target<Vec3>> {
         match gatherer {
-            // Position generators — read embedded count, produce N points
+            // Position generators - read embedded count, produce N points
             AvianGatherer::Sphere { radius, count } => {
                 let n = count.resolve(&mut ctx.rng);
                 (0..n)
@@ -158,7 +141,7 @@ impl SpatialBackend for AvianBackend {
                     .collect()
             }
 
-            // Entity gatherers — query avian3d spatial index
+            // Entity gatherers - query avian3d spatial index
             AvianGatherer::EntitiesInSphere(radius)
             | AvianGatherer::EntitiesInCircle(radius)
             | AvianGatherer::AllEntitiesInRadius(radius) => {
@@ -218,7 +201,7 @@ impl SpatialBackend for AvianBackend {
 // Vec3Offset
 // ---------------------------------------------------------------------------
 
-/// Backend-specific offset configuration for 3D space.
+/// Offset configuration for 3D space.
 #[derive(Clone, Debug)]
 pub enum Vec3Offset {
     None,
@@ -255,13 +238,11 @@ fn apply_vec3_offset(offset: &Vec3Offset, rng: &mut dyn RngCore) -> Vec3 {
 // AvianGatherer
 // ---------------------------------------------------------------------------
 
-/// Backend-specific gatherer configuration.
-///
-/// Position generators embed `NumberType` because count is a generation-time parameter.
-/// Entity gatherers do not — count limiting is a post-gather filter concern.
+/// Gatherer variants for 3D space.
+/// Position generators embed count; entity gatherers defer count limiting to filters.
 #[derive(Clone, Debug)]
 pub enum AvianGatherer {
-    // Position generators — produce N random points around origin
+    // Position generators - produce N random points around origin
     Sphere { radius: f32, count: NumberType },
     Circle { radius: f32, count: NumberType },
     Box { half_extents: Vec3, count: NumberType },
@@ -271,7 +252,7 @@ pub enum AvianGatherer {
         count: NumberType,
     },
 
-    // Entity gatherers — query avian3d spatial index
+    // Entity gatherers - query avian3d spatial index
     /// All entities in a 3D sphere, unordered.
     EntitiesInSphere(f32),
     /// All entities in an XZ circle, unordered.
@@ -286,12 +267,12 @@ pub enum AvianGatherer {
 // AvianFilter
 // ---------------------------------------------------------------------------
 
-/// Backend-specific post-gather filter configuration.
+/// Post-gather filter config.
 #[derive(Clone, Debug)]
 pub struct AvianFilter {
-    /// Count limit for entity gatherers (diesel utility type).
+    /// Max target count.
     pub count: Option<NumberType>,
-    /// Backend-specific: require line-of-sight to target.
+    /// Require line-of-sight (TODO).
     pub line_of_sight: bool,
 }
 
@@ -305,25 +286,8 @@ impl Default for AvianFilter {
 }
 
 // ---------------------------------------------------------------------------
-// Plugin — one line to register the generic observer
+// Plugin
 // ---------------------------------------------------------------------------
-
-/// Avian3d-specific plugin. Adds physics-based actions (projectile, kinematic projectile,
-/// velocity effect) and unfiltered collision handling on top of the core diesel infrastructure.
-///
-/// For faction/team-based collision filtering, also register `CollisionFilterPlugin<F>`.
-///
-/// # Usage
-///
-/// ```ignore
-/// app.add_plugins(AvianBackend::plugin());
-///
-/// // With additional filtered collisions:
-/// app.add_plugins((
-///     AvianBackend::plugin(),
-///     CollisionFilterPlugin::<MyTeamFilter>::default(),
-/// ));
-/// ```
 struct AvianDieselPlugin;
 
 impl Plugin for AvianDieselPlugin {
@@ -344,7 +308,7 @@ impl Plugin for AvianDieselPlugin {
             velocity::VelocityEffectPlugin,
         ));
 
-        // Collision system (unfiltered — entities with Collides marker)
+        // Collision system (unfiltered - entities with Collides marker)
         collision::plugin(app);
     }
 }
@@ -404,11 +368,10 @@ fn find_entities_in_radius(
 }
 
 // ---------------------------------------------------------------------------
-// RNG — SplitMix64 for fast, lightweight randomness
+// RNG - SplitMix64 for fast, lightweight randomness
 // ---------------------------------------------------------------------------
 
-/// Minimal SplitMix64 RNG. Lives in `AvianContext` as a `Local` so that
-/// randomness is an implementation detail of this backend, not a core concern.
+/// SplitMix64 RNG, stored as a `Local` in `AvianContext`.
 struct SplitMix64(u64);
 
 impl Default for SplitMix64 {

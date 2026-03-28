@@ -6,13 +6,13 @@ use bevy_gauge::prelude::{AttributesMut, ModifierSet};
 use crate::effect::GoOff;
 
 // ---------------------------------------------------------------------------
-// AttributeModifiers — persistent modifier application via GoOff
+// AttributeModifiers - persistent modifier application via GoOff
 // ---------------------------------------------------------------------------
 
 /// Component wrapping a [`ModifierSet`] that is applied to target entities
 /// when GoOff fires on this entity.
 ///
-/// These are **persistent** modifiers — they remain on the target entity until
+/// These are **persistent** modifiers - they remain on the target entity until
 /// explicitly removed. For one-shot mutations, use [`InstantModifierSet`]
 /// instead.
 ///

@@ -8,8 +8,7 @@ use crate::target::Target;
 // GoOff<P>
 // ---------------------------------------------------------------------------
 
-/// The central propagation event. When triggered on an effect entity, it delivers
-/// the resolved target list and kicks off sub-effect propagation.
+/// Fires on an effect entity with resolved targets, triggering sub-effect propagation.
 #[derive(EntityEvent, Clone)]
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     #[event_target]
@@ -27,7 +26,7 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
 // SubEffectOf / SubEffects
 // ---------------------------------------------------------------------------
 
-/// Relationship target: collection of child effects. Placed on parent effect entities.
+/// Collection of child effects.
 #[derive(Component, Default, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = SubEffectOf, linked_spawn)]
 pub struct SubEffects(Vec<Entity>);
@@ -48,7 +47,7 @@ impl SubEffects {
     }
 }
 
-/// Relationship component on a child effect pointing to its parent.
+/// Points a child effect to its parent.
 #[derive(Component, Clone, PartialEq, Eq, Debug)]
 #[relationship(relationship_target = SubEffects)]
 pub struct SubEffectOf(#[entities] pub Entity);

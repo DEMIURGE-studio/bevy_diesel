@@ -1,22 +1,8 @@
 //! Fireball & Firestorm example
 //!
-//! Demonstrates data-driven template composition where templates reference other templates:
+//! Templates: explosion, explosive_projectile (shared), fireball, firestorm_zone, firestorm
 //!
-//! **Templates (shared building blocks):**
-//! - `explosion` — expanding sphere VFX, timed despawn
-//! - `explosive_projectile` — ballistic projectile that spawns `explosion` on collision
-//!
-//! **Ability templates (player-facing):**
-//! - `fireball` — on invoke, spawns `explosive_projectile` from invoker aimed at target
-//! - `firestorm_zone` — repeater that periodically drops `explosive_projectile`s in a circle
-//! - `firestorm` — on invoke, spawns `firestorm_zone` above target
-//!
-//! The key insight: `explosive_projectile` and `explosion` are shared by both abilities.
-//! The fireball fires an aimed projectile; the firestorm drops them from above with gravity.
-//!
-//! Controls:
-//! - Left click: fire a Fireball at the cursor
-//! - Right click: drop a Firestorm at the cursor
+//! Left click: fireball at cursor | Right click: firestorm at cursor
 
 use std::time::Duration;
 
@@ -29,11 +15,11 @@ use diesel_avian3d::prelude::*;
 // Team / collision filtering
 // ---------------------------------------------------------------------------
 
-/// Team marker on characters and projectiles. Same team = allies.
+/// Team marker. Same team = allies.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 struct Team(u32);
 
-/// Filter component placed on projectiles. Determines which teams they can hit.
+/// Filter on projectiles. Determines which teams they can hit.
 #[derive(Component, Clone, Debug)]
 enum TeamFilter {
     Enemies,
@@ -65,7 +51,7 @@ enum Layer {
 }
 
 // ---------------------------------------------------------------------------
-// Marker components (for attaching visuals)
+// Marker components - we won't need these with bsn!
 // ---------------------------------------------------------------------------
 
 #[derive(Component)]
@@ -93,7 +79,7 @@ fn register_templates(mut registry: ResMut<TemplateRegistry>) {
 }
 
 // ---------------------------------------------------------------------------
-// explosion — expanding sphere, despawns after a short time
+// explosion - expanding sphere, despawns after a short time
 // ---------------------------------------------------------------------------
 
 fn explosion_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
@@ -110,16 +96,8 @@ fn explosion_template(commands: &mut Commands, entity: Option<Entity>) -> Entity
 }
 
 // ---------------------------------------------------------------------------
-// explosive_projectile — projectile that spawns "explosion" on collision
+// explosive_projectile - projectile that spawns "explosion" on collision
 // ---------------------------------------------------------------------------
-//
-//  Root (ProjectileEffect, TeamFilter, Attributes { ProjectileLife: 1.0 })
-//    ├── Flying state
-//    │     ├── SpawnExplosion sub-effect → spawns "explosion" at collision point
-//    │     └── DecrementLife sub-effect → decrements ProjectileLife on root
-//    ├── Done state (despawn)
-//    ├── Edge: Flying →[CollidedEntity]→ Flying (self-transition; triggers sub-effects each hit)
-//    └── Edge: Root →[AlwaysEdge + Guard]→ Done (fires when ProjectileLife <= 0)
 
 fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
@@ -129,7 +107,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
             .spawn((Name::new("Flying"), SubstateOf(entity), InvokedBy(entity)))
             .id();
 
-        // Sub-effect: spawn explosion at collision point
+        // Spawn explosion at collision point
         parent.spawn((
             Name::new("SpawnExplosion"),
             SubstateOf(flying),
@@ -138,7 +116,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
             SpawnConfig::at_passed("explosion"),
         ));
 
-        // Sub-effect: decrement ProjectileLife on root via instant modifier
+        // Decrement ProjectileLife on root
         let life_targeting = parent
             .spawn((
                 Name::new("DecrementLife"),
@@ -168,7 +146,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
             ))
             .id();
 
-        // Flying →[collision]→ Flying (self-transition: re-enter triggers GoOff on sub-effects)
+        // Flying →[collision]→ Flying (self-transition re-fires sub-effects)
         parent.spawn((
             Name::new("Flying→Flying (collision)"),
             Source(flying),
@@ -208,16 +186,8 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
 }
 
 // ---------------------------------------------------------------------------
-// fireball (ability) — on invoke, spawns explosive_projectile at invoker → target
+// fireball (ability) - spawns explosive_projectile at invoker → target
 // ---------------------------------------------------------------------------
-//
-//  Root (Ability)
-//    ├── Ready state
-//    ├── Invoke state
-//    │     └── SpawnProjectile sub-effect → spawns "explosive_projectile"
-//    │           at invoker position, targeted at invoker's target
-//    ├── Edge: Ready →[StartInvoke]→ Invoke
-//    └── Edge: Invoke →[AlwaysEdge]→ Ready
 
 fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
@@ -227,7 +197,7 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
 
         let invoke = parent.spawn((Name::new("Invoke"), SubstateOf(entity))).id();
 
-        // Sub-effect: spawn projectile at invoker, give it a Target aimed at invoker's target
+        // Spawn projectile at invoker, aimed at invoker's target
         parent.spawn((
             Name::new("SpawnProjectile"),
             SubstateOf(invoke),
@@ -268,19 +238,8 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
 }
 
 // ---------------------------------------------------------------------------
-// firestorm_zone — repeater that drops explosive_projectiles in a circle
+// firestorm_zone - repeater that drops explosive_projectiles in a circle
 // ---------------------------------------------------------------------------
-//
-//  Root
-//    ├── Repeating state (Repeater, 5 iterations)
-//    ├── SpawnWave state → spawns "explosive_projectile" in circle around root
-//    ├── Done state (despawn)
-//    ├── Edge: Repeating →[OnRepeat]→ SpawnWave
-//    ├── Edge: SpawnWave →[AlwaysEdge+Delay]→ Repeating
-//    └── Edge: Repeating →[OnComplete]→ Done
-//
-//  Spawned projectiles have no Target, so they get physics but no velocity — they
-//  just fall under gravity from their elevated spawn positions.
 
 fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
@@ -353,15 +312,8 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
 }
 
 // ---------------------------------------------------------------------------
-// firestorm (ability) — on invoke, spawns firestorm_zone above target
+// firestorm (ability) - spawns firestorm_zone above target
 // ---------------------------------------------------------------------------
-//
-//  Root (Ability)
-//    ├── Ready state
-//    ├── Invoke state
-//    │     └── SpawnZone sub-effect → spawns "firestorm_zone" above the target
-//    ├── Edge: Ready →[StartInvoke]→ Invoke
-//    └── Edge: Invoke →[AlwaysEdge]→ Ready
 
 fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
@@ -371,7 +323,7 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
 
         let invoke = parent.spawn((Name::new("Invoke"), SubstateOf(entity))).id();
 
-        // Sub-effect: spawn firestorm_zone at the target position, elevated
+        // Spawn firestorm_zone at target, elevated
         parent.spawn((
             Name::new("SpawnZone"),
             SubstateOf(invoke),
@@ -464,7 +416,7 @@ fn setup(
         firestorm,
     });
 
-    // Camera — isometric-ish
+    // Camera - isometric-ish
     registry_cmds.spawn((
         Name::new("Camera"),
         Camera3d::default(),
@@ -490,7 +442,7 @@ struct PlayerAbilities {
 }
 
 // ===========================================================================
-// INPUT — resolve cursor, invoke abilities
+// INPUT - resolve cursor, invoke abilities
 // ===========================================================================
 
 fn update_cursor_target(
@@ -550,7 +502,7 @@ fn invoke_abilities(
 }
 
 // ===========================================================================
-// VISUALS — attach meshes to spawned template entities
+// VISUALS - attach meshes to spawned template entities
 // ===========================================================================
 
 #[derive(Resource)]

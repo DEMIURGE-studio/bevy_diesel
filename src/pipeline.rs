@@ -5,20 +5,7 @@ use crate::effect::{GoOff, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
-/// Core pipeline function: resolve → offset → gather.
-///
-/// Returns **unfiltered** results. Filtering is applied separately via
-/// `B::apply_filter` (called automatically by `propagate_observer`).
-///
-/// # Arguments
-///
-/// * `generator` — The targeting pipeline configuration.
-/// * `ctx` — The backend's runtime context (spatial queries, transforms, RNG, etc.).
-/// * `invoker` — The entity that invoked the ability.
-/// * `invoker_target` — The invoker's current target (pre-resolved).
-/// * `root` — The root entity of the ability hierarchy.
-/// * `spawn_pos` — The spawn position context (for `TargetType::Spawn`).
-/// * `passed` — The incoming target from the parent effect (for `TargetType::Passed`).
+/// Resolve → offset → gather. Returns unfiltered results.
 pub fn generate_targets<B: SpatialBackend>(
     generator: &TargetGenerator<B>,
     ctx: &mut B::Context<'_, '_>,
@@ -64,11 +51,7 @@ pub fn generate_targets<B: SpatialBackend>(
     }
 }
 
-/// Generic GoOff propagation observer. Handles context resolution, MapEach
-/// propagation, and child triggering — backends provide spatial logic via
-/// their `SpatialBackend` trait implementation.
-///
-/// Register with: `app.add_observer(propagate_observer::<MyBackend>);`
+/// GoOff propagation observer. Resolves targets for each sub-effect and triggers GoOff on children.
 pub fn propagate_observer<B: SpatialBackend>(
     go_off: On<GoOff<B::Pos>>,
     mut ctx: B::Context<'_, '_>,

@@ -7,32 +7,18 @@ use crate::backend::SpatialBackend;
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
-// CollisionFilter — generic trait for collision/target filtering
+// CollisionFilter - generic trait for collision/target filtering
 // ---------------------------------------------------------------------------
 
-/// A generic filter for determining whether an ability can affect a target entity.
+/// Determines whether an ability can affect a target entity.
 ///
-/// Backends use this to filter collisions and target resolution. Users implement
-/// this trait for their own faction/alliance/team system.
-///
-/// - `Self` is the filter component placed on ability entities (e.g. your `TeamFilter`)
-/// - `Self::Lookup` is the component queried on invoker/target entities (e.g. your `Team`)
-///
-/// # Example
+/// `Self` goes on the ability entity, `Self::Lookup` is queried on invoker/target.
 ///
 /// ```ignore
-/// #[derive(Component, Clone, Debug)]
-/// pub enum Faction { Allies, Enemies, Both }
-///
-/// #[derive(Component, Clone, Copy)]
-/// pub struct Alliance(pub u32);
-///
 /// impl CollisionFilter for Faction {
 ///     type Lookup = Alliance;
 ///     fn can_target(&self, invoker: Option<&Alliance>, target: Option<&Alliance>) -> bool {
 ///         match (self, invoker, target) {
-///             (Faction::Both, _, _) => true,
-///             (Faction::Allies, Some(i), Some(t)) => i.0 == t.0,
 ///             (Faction::Enemies, Some(i), Some(t)) => i.0 != t.0,
 ///             _ => true,
 ///         }
@@ -40,14 +26,10 @@ use crate::target::Target;
 /// }
 /// ```
 pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
-    /// The component to look up on invoker and target entities.
+    /// Component queried on invoker and target entities.
     type Lookup: Component;
 
     /// Return `true` if the ability should affect this target.
-    ///
-    /// `invoker_data` is the `Lookup` component on the root invoker entity.
-    /// `target_data` is the `Lookup` component on the potential target entity.
-    /// Either may be `None` if the entity doesn't have the component.
     fn can_target(
         &self,
         invoker_data: Option<&Self::Lookup>,
@@ -55,11 +37,7 @@ pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
     ) -> bool;
 }
 
-/// Simple marker component that opts an entity into collision events
-/// without any filtering. Every collision fires an event.
-///
-/// For filtered collisions (faction/team-based), implement the `CollisionFilter`
-/// trait and register `CollisionFilterPlugin<F>` in your app.
+/// Marker: every collision fires an event, no filtering.
 #[derive(Component, Clone, Debug, Default)]
 pub struct Collides;
 
@@ -67,9 +45,7 @@ pub struct Collides;
 // Utility types
 // ---------------------------------------------------------------------------
 
-/// Count specification: fixed or random range.
-/// Used by position-generator Gatherer variants (embedded count) and
-/// by filter logic (post-gather capping).
+/// Count: fixed or random range.
 #[derive(Clone, Debug)]
 pub enum NumberType {
     Fixed(usize),
@@ -94,10 +70,10 @@ impl NumberType {
 }
 
 // ---------------------------------------------------------------------------
-// Utility functions — backends call these in their filter logic
+// Utility functions - backends call these in their filter logic
 // ---------------------------------------------------------------------------
 
-/// Limit the number of targets using reservoir sampling for random selection.
+/// Limit targets via reservoir sampling.
 pub fn limit_count<P: Clone + Copy + Send + Sync + Default + Debug + 'static>(
     targets: Vec<Target<P>>,
     number: &NumberType,
@@ -124,7 +100,7 @@ pub fn limit_count<P: Clone + Copy + Send + Sync + Default + Debug + 'static>(
     selected
 }
 
-/// Sort targets by distance to an origin point (nearest first).
+/// Sort targets by distance (nearest first).
 pub fn sort_by_distance<B: SpatialBackend>(
     targets: &mut [Target<B::Pos>],
     origin: &B::Pos,

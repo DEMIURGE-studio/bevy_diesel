@@ -15,10 +15,8 @@ pub enum Trajectory {
     HighAngle,
 }
 
-/// Applies a ballistic velocity to the invoker entity when GoOff fires.
-/// This is a simplified version — it sets `LinearVelocity` on the invoker
-/// but does NOT manage character controller state (grounding, jumping, etc.).
-/// Wrap this in your game code if you need character-controller integration.
+/// Sets `LinearVelocity` on the invoker when GoOff fires.
+/// Does not manage character controller state.
 #[derive(Component, Clone, Reflect)]
 pub struct VelocityEffect {
     pub speed: f32,

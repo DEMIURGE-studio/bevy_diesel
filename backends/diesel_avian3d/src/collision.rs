@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_diesel::prelude::*;
 
 // ---------------------------------------------------------------------------
-// Unfiltered collision system — fires for any entity with `Collides` marker
+// Unfiltered collision system - fires for any entity with `Collides` marker
 // ---------------------------------------------------------------------------
 
 pub(crate) fn plugin(app: &mut App) {
@@ -71,21 +71,13 @@ fn emit_position_if(
 }
 
 // ---------------------------------------------------------------------------
-// Filtered collision system — generic over CollisionFilter
+// Filtered collision system - generic over CollisionFilter
 // ---------------------------------------------------------------------------
 
-/// Plugin that adds filtered collision handling for a specific `CollisionFilter` type.
-///
-/// Register alongside `AvianDieselPlugin` when you need faction/team-based collision filtering.
-/// Entities with an `F` component will have their collisions checked via `F::can_target()`.
-///
-/// # Example
+/// Adds filtered collision handling for a `CollisionFilter` implementation.
 ///
 /// ```ignore
-/// app.add_plugins((
-///     AvianDieselPlugin,
-///     CollisionFilterPlugin::<MyTeamFilter>::default(),
-/// ));
+/// app.add_plugins(CollisionFilterPlugin::<MyTeamFilter>::default());
 /// ```
 pub struct CollisionFilterPlugin<F: CollisionFilter> {
     _marker: std::marker::PhantomData<F>,
@@ -157,8 +149,7 @@ fn emit_entity_filtered<F: CollisionFilter>(
     target: Entity,
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
-        // Use the ability's position as the collision point — for moving projectiles
-        // this is where the hit actually occurred, not the target's center.
+        // Use ability's position as collision point, fall back to target's
         let collision_pos = q_position.get(ability).ok().map(|p| p.0)
             .or_else(|| q_position.get(target).ok().map(|p| p.0))
             .unwrap_or(Vec3::ZERO);

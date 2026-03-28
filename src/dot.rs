@@ -3,8 +3,7 @@ use std::marker::PhantomData;
 
 // ================= Periodic Effect Relationships =================
 
-/// Relationship target: collection of entities affected by a periodic effect of type T.
-/// Placed on the periodic effect "manager" entity.
+/// Entities affected by a periodic effect of type T.
 #[derive(Component, Debug, PartialEq, Eq, Reflect)]
 #[relationship_target(relationship = PeriodicEffectTarget<T>, linked_spawn)]
 #[reflect(Component, FromWorld)]
@@ -31,8 +30,7 @@ impl<T: Reflect> PeriodicEffectTargets<T> {
     }
 }
 
-/// Relationship component placed on an affected entity pointing to the
-/// periodic effect manager of type T.
+/// Points an affected entity back to the periodic effect of type T.
 #[derive(Component, Clone, Debug, Reflect)]
 #[relationship(relationship_target = PeriodicEffectTargets<T>)]
 #[reflect(Component, FromWorld, Default)]
@@ -64,9 +62,7 @@ impl<T: Reflect> PeriodicEffectTarget<T> {
 
 // ================= Periodic Tick Event =================
 
-/// Generic event fired each tick for a periodic effect of type T.
-/// The source is the effect manager entity; the target is the affected entity.
-/// Users observe this event to apply their own periodic logic (damage, healing, etc.).
+/// Fired each tick of a periodic effect. Observe to apply damage, healing, etc.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
 pub struct PeriodicTick<T: Reflect> {
     #[event_target]
@@ -88,8 +84,7 @@ impl<T: Reflect> PeriodicTick<T> {
 
 // ================= Tick System =================
 
-/// System that fires `PeriodicTick<T>` events for all active periodic effects.
-/// Run this on a timer (e.g., `on_timer(Duration::from_millis(250))`) to control tick rate.
+/// Fires `PeriodicTick<T>` for all active effects. Run on a timer to control tick rate.
 pub fn periodic_tick_system<T: Reflect + Component>(
     q_effects: Query<(Entity, &PeriodicEffectTargets<T>)>,
     mut commands: Commands,

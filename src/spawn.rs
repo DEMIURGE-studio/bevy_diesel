@@ -15,8 +15,7 @@ use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
 // TemplateRegistry
 // ---------------------------------------------------------------------------
 
-/// Maps string IDs to spawning functions. Users register their entity templates
-/// here; the spawn observer looks them up by `SpawnConfig::template_id`.
+/// Maps string IDs to template spawning functions.
 #[derive(Resource, Default)]
 pub struct TemplateRegistry {
     templates: HashMap<String, Box<dyn Fn(&mut Commands, Option<Entity>) -> Entity + Send + Sync>>,
@@ -42,7 +41,7 @@ impl TemplateRegistry {
 // SpawnConfig
 // ---------------------------------------------------------------------------
 
-/// Component for configuring entity spawning within the effect tree.
+/// Configures entity spawning within the effect tree.
 #[derive(Component, Clone, Debug)]
 pub struct SpawnConfig<B: SpatialBackend> {
     pub template_id: String,
@@ -171,8 +170,7 @@ spawn_event!(OnSpawnInvoker);
 // Spawn event observer helpers
 // ---------------------------------------------------------------------------
 
-/// Forward OnSpawnOrigin to GoOff. Attach with `.observe(on_spawn_origin::<B::Pos>)` on
-/// an entity whose state machine should react to its own spawn position.
+/// Forward OnSpawnOrigin to GoOff.
 pub fn on_spawn_origin<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>(
     ev: On<OnSpawnOrigin<P>>,
     mut commands: Commands,

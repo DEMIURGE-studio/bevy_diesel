@@ -130,7 +130,7 @@ pub struct PropagationRegistrar {
 
 inventory::collect!(PropagationRegistrar);
 
-/// Registers observers and reflected types needed for propagation for a given event type `T`.
+/// Register propagation observers and types for event `T`.
 pub fn register_propagation_for<
     T: EntityEvent + SetEntityEventTarget + Clone + Reflect + TypePath,
 >(
@@ -145,7 +145,7 @@ pub fn register_propagation_for<
         .add_systems(Update, register_propagation_target_root::<T>);
 }
 
-/// Function plugin that consumes all inventory submissions and applies their registrations.
+/// Applies all inventory-submitted propagation registrations.
 pub fn plugin(app: &mut App) {
     for reg in inventory::iter::<PropagationRegistrar> {
         (reg.register)(app);

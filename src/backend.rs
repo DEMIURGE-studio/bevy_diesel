@@ -10,66 +10,53 @@ use crate::gearbox::repeater;
 use crate::spawn::{OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget};
 use crate::target::Target;
 
-/// A type-level configuration for spatial representation.
+/// Defines how diesel interacts with a game's spatial representation.
 ///
-/// Backends implement this trait on a unit struct (e.g. `AvianBackend`) and define
-/// the position, offset, gatherer, and filter types. Users interact with backends
-/// through type aliases exported from the backend's prelude.
-///
-/// The `Context` GAT bundles the backend's runtime queries (transforms, spatial queries,
-/// faction lookups, RNG, etc.) into a single `SystemParam`. Diesel's generic propagation
-/// observer extracts it automatically — backend authors never write observer boilerplate.
-///
-/// # Plugin methods
-///
-/// `plugin_core()` returns a `DieselCorePlugin` that registers all diesel infrastructure
-/// for the backend's position type. `plugin()` defaults to calling `plugin_core()` but
-/// can be overridden to add backend-specific systems while still including the core.
+/// Implement on a unit struct (e.g. `AvianBackend`) to provide position, offset,
+/// gatherer, and filter types. The `Context` GAT bundles runtime queries
+/// (transforms, spatial index, RNG, etc.) into a single `SystemParam`.
 ///
 /// ```ignore
-/// // Simple — just the core
 /// app.add_plugins(MyBackend::plugin());
-///
-/// // Backend overrides plugin() to add custom systems
-/// impl SpatialBackend for MyBackend {
-///     fn plugin() -> impl Plugin {
-///         MyBackendPlugin  // calls Self::plugin_core() internally
-///     }
-/// }
 /// ```
 pub trait SpatialBackend: Send + Sync + 'static {
-    /// The position representation (Vec3, Vec2, IVec2, usize, etc.)
-    type Pos: Clone + Copy + Send + Sync + Default + Debug + bevy::reflect::TypePath + bevy::reflect::Reflect + 'static;
+    /// Position type (Vec3, Vec2, IVec2, etc.)
+    type Pos: Clone
+        + Copy
+        + Send
+        + Sync
+        + Default
+        + Debug
+        + bevy::reflect::TypePath
+        + bevy::reflect::Reflect
+        + 'static;
 
-    /// Backend-specific offset configuration (e.g. `Vec3Offset`, `GridOffset`)
+    /// Offset type (e.g. `Vec3Offset`, `GridOffset`)
     type Offset: Clone + Send + Sync + Default + Debug + 'static;
 
-    /// Backend-specific gatherer configuration (e.g. `AvianGatherer`, `GridGatherer`).
-    /// Does NOT require Default — lives inside `Option<B::Gatherer>` on TargetGenerator.
+    /// Gatherer type (e.g. `AvianGatherer`). No Default bound - wrapped in `Option`.
     type Gatherer: Clone + Send + Sync + Debug + 'static;
 
-    /// Backend-specific post-gather filter configuration (e.g. `AvianFilter`)
+    /// Post-gather filter type (e.g. `AvianFilter`)
     type Filter: Clone + Send + Sync + Default + Debug + 'static;
 
-    /// Backend-specific runtime context bundling all needed system params.
-    /// Diesel's generic propagation observer extracts this automatically.
-    ///
-    /// Include any mutable state (RNG, caches, etc.) here — trait methods
-    /// receive `&mut Context`.
+    /// Runtime context bundled as a `SystemParam` (spatial queries, transforms, RNG, etc.).
     type Context<'w, 's>: SystemParam;
 
-    /// Apply an offset to a position. Called during pipeline stage 2.
-    fn apply_offset(ctx: &mut Self::Context<'_, '_>, pos: Self::Pos, offset: &Self::Offset) -> Self::Pos;
+    /// Apply an offset to a position.
+    fn apply_offset(
+        ctx: &mut Self::Context<'_, '_>,
+        pos: Self::Pos,
+        offset: &Self::Offset,
+    ) -> Self::Pos;
 
-    /// Calculate the distance between two positions.
+    /// Distance between two positions.
     fn distance(a: &Self::Pos, b: &Self::Pos) -> f32;
 
-    /// Look up an entity's position. Called during pipeline stage 1 (resolve).
+    /// Look up an entity's position.
     fn position_of(ctx: &Self::Context<'_, '_>, entity: Entity) -> Option<Self::Pos>;
 
-    /// Gather targets from a position. Called during pipeline stage 3 when
-    /// `gatherer` is `Some`. Handles both position generation and entity querying —
-    /// the core doesn't distinguish between them.
+    /// Gather targets around a position.
     fn gather(
         ctx: &mut Self::Context<'_, '_>,
         origin: Self::Pos,
@@ -77,9 +64,7 @@ pub trait SpatialBackend: Send + Sync + 'static {
         exclude: Entity,
     ) -> Vec<Target<Self::Pos>>;
 
-    /// Apply post-gather filtering. Called during pipeline stage 4.
-    /// Backends compose diesel utility functions (limit_count, sort_by_distance, etc.)
-    /// with any custom filters (line-of-sight, priority scoring, etc.).
+    /// Filter gathered targets (count limits, line-of-sight, etc.).
     fn apply_filter(
         ctx: &mut Self::Context<'_, '_>,
         targets: Vec<Target<Self::Pos>>,
@@ -88,17 +73,14 @@ pub trait SpatialBackend: Send + Sync + 'static {
         origin: Self::Pos,
     ) -> Vec<Target<Self::Pos>>;
 
-    /// Compute the `Transform` to use when spawning an entity at `world_pos`.
-    /// If `parent` is provided, returns a local-space transform relative to that entity.
+    /// Compute a `Transform` for spawning at `world_pos`, local to `parent` if given.
     fn spawn_transform(
         world_pos: Self::Pos,
         parent: Option<Entity>,
         q_global_transform: &Query<&GlobalTransform>,
     ) -> Transform;
 
-    /// Returns the core diesel plugin that registers all generic infrastructure
-    /// for this backend's position type: state machines, repeaters, despawn,
-    /// propagation, spawning, and transition events.
+    /// Core plugin: state machines, repeaters, despawn, transitions, propagation.
     fn plugin_core() -> DieselCorePlugin<Self>
     where
         Self: Sized,
@@ -108,12 +90,7 @@ pub trait SpatialBackend: Send + Sync + 'static {
         }
     }
 
-    /// Returns the full plugin for this backend. Override to add backend-specific
-    /// systems (physics, collision, projectiles, etc.).
-    ///
-    /// The default implementation just returns `plugin_core()`. Override it and
-    /// call `Self::plugin_core()` within your custom plugin to get the defaults
-    /// plus your additions.
+    /// Full backend plugin. Override to add backend-specific systems on top of `plugin_core()`.
     fn plugin() -> impl Plugin
     where
         Self: Sized,
@@ -123,23 +100,13 @@ pub trait SpatialBackend: Send + Sync + 'static {
 }
 
 // ---------------------------------------------------------------------------
-// DieselCorePlugin<B> — registers all generic diesel infrastructure
+// DieselCorePlugin<B> - registers all generic diesel infrastructure
 // ---------------------------------------------------------------------------
 
-/// Core plugin that registers diesel infrastructure for a specific `SpatialBackend`.
+/// Registers generic diesel infrastructure for a `SpatialBackend`.
 ///
-/// Registered automatically by `SpatialBackend::plugin_core()`. Includes everything
-/// that doesn't require the backend's `Context` GAT:
-/// - `GearboxPlugin` (state machine core)
-/// - `TemplateRegistry` resource
-/// - Repeater system for `OnRepeat<B::Pos>`
-/// - Despawn system
-/// - Transition registration for all generic events
-/// - Propagation plugin (inventory-based event forwarding)
-///
-/// **Backend-specific observers** (`propagate_observer`, `spawn_observer`, `print_effect`)
-/// must be registered by the backend's `plugin()` override since they require the
-/// backend's `Context` system param.
+/// Backend-specific observers (`propagate_observer`, `spawn_observer`, etc.)
+/// must be registered by the backend's `plugin()` override due to the Context GAT.
 pub struct DieselCorePlugin<B: SpatialBackend> {
     _marker: PhantomData<B>,
 }

@@ -9,9 +9,7 @@ use crate::backend::SpatialBackend;
 // InvokerTarget<P>
 // ---------------------------------------------------------------------------
 
-/// The invoker's current target — who/where it is aiming at.
-/// Placed on character/AI entities so the pipeline can resolve
-/// `TargetType::InvokerTarget` without conflating it with per-effect `Target<P>`.
+/// The invoker's current aim target. Placed on character/AI entities.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct InvokerTarget<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Option<Entity>,
@@ -20,11 +18,17 @@ pub struct InvokerTarget<P: Clone + Copy + Send + Sync + Default + Debug + 'stat
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> InvokerTarget<P> {
     pub fn entity(entity: Entity, position: P) -> Self {
-        Self { entity: Some(entity), position }
+        Self {
+            entity: Some(entity),
+            position,
+        }
     }
 
     pub fn position(position: P) -> Self {
-        Self { entity: None, position }
+        Self {
+            entity: None,
+            position,
+        }
     }
 }
 
@@ -66,9 +70,14 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Target<P> {
     }
 }
 
-impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> From<InvokerTarget<P>> for Target<P> {
+impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> From<InvokerTarget<P>>
+    for Target<P>
+{
     fn from(it: InvokerTarget<P>) -> Self {
-        Target { entity: it.entity, position: it.position }
+        Target {
+            entity: it.entity,
+            position: it.position,
+        }
     }
 }
 
@@ -103,8 +112,8 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Default for Targ
 // TargetGenerator<B>
 // ---------------------------------------------------------------------------
 
-/// Full targeting pipeline configuration: target type, offset, optional gatherer, filter.
-/// This is plain data — not a Component. Use `TargetMutator<B>` for the Component wrapper.
+/// Targeting pipeline config: target type, offset, gatherer, filter.
+/// Plain data. See `TargetMutator<B>` for the Component wrapper.
 #[derive(Clone, Debug)]
 pub struct TargetGenerator<B: SpatialBackend> {
     pub target_type: TargetType<B::Pos>,
@@ -189,8 +198,7 @@ impl<B: SpatialBackend> TargetGenerator<B> {
 // TargetMutator<B>
 // ---------------------------------------------------------------------------
 
-/// Component wrapper around `TargetGenerator<B>`. Placed on effect entities to
-/// transform incoming targets during propagation. Provides a builder API.
+/// Component wrapper around `TargetGenerator<B>` for effect entities.
 #[derive(Component, Clone, Debug)]
 pub struct TargetMutator<B: SpatialBackend> {
     pub generator: TargetGenerator<B>,
@@ -248,7 +256,7 @@ impl<B: SpatialBackend> TargetMutator<B> {
         self
     }
 
-    /// Set the gatherer. Wraps in `Some` for ergonomics — `None` means identity.
+    /// Set the gatherer (`None` = identity).
     pub fn with_gatherer(mut self, gatherer: B::Gatherer) -> Self {
         self.generator.gatherer = Some(gatherer);
         self

@@ -1,8 +1,5 @@
-//! Generic position-typed events used by the diesel ability pipeline.
-//!
-//! These are defined once in diesel core with a position type parameter `P`.
-//! Backend plugins register the concrete monomorphizations (e.g. `OnRepeat<Vec3>`)
-//! via `DieselCorePlugin`.
+//! Position-typed events for the ability pipeline.
+//! Backends alias these with their concrete position type (e.g. `OnRepeat<Vec3>`).
 
 use std::fmt::Debug;
 
@@ -18,16 +15,15 @@ use crate::target::Target;
 // Position type bound alias (for readability)
 // ---------------------------------------------------------------------------
 
-/// Shorthand for the bounds required on a position type throughout diesel.
+/// Bound alias for position types.
 pub trait PosBound: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static {}
 impl<T: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static> PosBound for T {}
 
 // ---------------------------------------------------------------------------
-// OnRepeat<P> — emitted by Repeater on each tick
+// OnRepeat<P> - emitted by Repeater on each tick
 // ---------------------------------------------------------------------------
 
-/// Emitted by the repeater system on each iteration. Transitions into a state
-/// that triggers `GoOff<P>` with empty targets — sub-effects resolve their own.
+/// Emitted by the repeater on each iteration.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
 pub struct OnRepeat<P: PosBound> {
     #[event_target]
@@ -77,11 +73,10 @@ impl<P: PosBound> From<Vec<Target<P>>> for OnRepeat<P> {
 }
 
 // ---------------------------------------------------------------------------
-// StartInvoke<P> — trigger an ability
+// StartInvoke<P> - trigger an ability
 // ---------------------------------------------------------------------------
 
-/// Triggers an ability's invocation. The standard event for "start using this ability."
-/// Carries the invoker's current targets to the ability's state machine.
+/// Triggers an ability invocation with the invoker's current targets.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
 pub struct StartInvoke<P: PosBound> {
     #[event_target]
@@ -122,11 +117,10 @@ impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
 }
 
 // ---------------------------------------------------------------------------
-// CollidedEntity<P> — collision event carrying entity targets
+// CollidedEntity<P> - collision event carrying entity targets
 // ---------------------------------------------------------------------------
 
-/// Fired when an ability entity collides with a target entity.
-/// Carries the target entity and its position.
+/// Collision with an entity target.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
 pub struct CollidedEntity<P: PosBound> {
     #[event_target]
@@ -167,10 +161,10 @@ impl<P: PosBound> From<Vec<Target<P>>> for CollidedEntity<P> {
 }
 
 // ---------------------------------------------------------------------------
-// CollidedPosition<P> — collision event carrying contact position
+// CollidedPosition<P> - collision event carrying contact position
 // ---------------------------------------------------------------------------
 
-/// Fired when an ability entity collides, carrying the contact point position.
+/// Collision with a contact point position.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
 pub struct CollidedPosition<P: PosBound> {
     #[event_target]

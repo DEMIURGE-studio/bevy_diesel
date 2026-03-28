@@ -8,7 +8,7 @@
 //! This uses bevy_gearbox's `EventValidator` trait to gate state machine
 //! transitions on runtime conditions.
 //!
-//! This is a PATTERN — define your own conditions and compose them.
+//! This is a PATTERN - define your own conditions and compose them.
 
 use bevy::prelude::*;
 use bevy_gearbox::transitions::EventValidator;
@@ -176,5 +176,5 @@ impl ProvidesDamageInfo for DamageEvent {
 fn main() {
     // This example is primarily a code pattern reference.
     // See the inline usage example above for how to integrate with gearbox.
-    println!("Validators example — see source code for patterns");
+    println!("Validators example - see source code for patterns");
 }

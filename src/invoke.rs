@@ -1,15 +1,12 @@
 use bevy::prelude::*;
 use bevy_gearbox::SimpleTransition;
 
-/// Marker component for ability entities.
-/// Automatically requires `InvokeStatus` to be present.
+/// Ability marker. Requires `InvokeStatus`.
 #[derive(Component, Default, Reflect)]
 #[require(InvokeStatus)]
 pub struct Ability;
 
-/// Tracks whether an ability is being invoked by its owner.
-/// Users set this to `TryInvoke` from their input/AI systems;
-/// the invocation handler reads it and emits the appropriate events.
+/// Set to `TryInvoke` from input/AI to trigger an ability.
 #[derive(Component, Clone, Debug, Reflect, PartialEq)]
 pub enum InvokeStatus {
     Idle,
@@ -22,17 +19,14 @@ impl Default for InvokeStatus {
     }
 }
 
-/// Transition event fired when an ability invocation completes.
-/// Use as an edge in gearbox state machines to transition back to idle/ready state.
+/// Fired when an ability invocation completes.
 #[derive(SimpleTransition, EntityEvent, Reflect, Clone)]
 pub struct InvocationComplete {
     #[event_target]
     pub target: Entity,
 }
 
-/// Observer helper: on entering a state, re-trigger invocation if the ability
-/// is still held (InvokeStatus::TryInvoke). Attach to ready/idle states to
-/// allow held-button re-invocation.
+/// Re-triggers invocation on state entry if still held (`TryInvoke`).
 pub fn check_should_reinvoke_ability(
     enter_state: On<bevy_gearbox::EnterState>,
     mut q_ability: Query<&mut InvokeStatus>,

@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 
-/// Calculate launch velocity for a low-angle (direct) ballistic trajectory.
-/// Returns a velocity vector that will hit `target` from `origin` at the given `speed` under `gravity`.
-/// Falls back to 45 degrees if the target is out of range.
+/// Low-angle ballistic launch velocity. Falls back to 45 degrees if out of range.
 pub fn calculate_low_angle_velocity_with_speed(
     origin: Vec3,
     target: Vec3,
@@ -18,9 +16,7 @@ pub fn calculate_low_angle_velocity_with_speed(
     compose_velocity(horizontal_direction, launch_angle, speed)
 }
 
-/// Calculate launch velocity for a high-angle (arcing) ballistic trajectory.
-/// Returns a velocity vector with a more dramatic arc. Used for mobility abilities.
-/// Falls back to 45 degrees if the target is out of range.
+/// High-angle ballistic launch velocity. Falls back to 45 degrees if out of range.
 pub fn calculate_high_angle_velocity_with_speed(
     origin: Vec3,
     target: Vec3,
@@ -46,7 +42,7 @@ pub fn calculate_velocity_with_speed(
     calculate_low_angle_velocity_with_speed(origin, target, speed, gravity)
 }
 
-/// Clamp a target position to be within `[min, max]` distance from the origin.
+/// Clamp target position to `[min, max]` distance from origin.
 pub fn distance_lock(origin: Vec3, target: Vec3, min: f32, max: f32) -> Vec3 {
     let distance = origin.distance(target);
     if distance >= min && distance <= max {
