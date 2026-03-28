@@ -2,6 +2,12 @@
 name = "diesel_avian3d"
 version = "0.1.0"
 edition = "2024"
+description = "Avian3d spatial backend for bevy_diesel"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_diesel"
+homepage = "https://github.com/DEMIURGE-studio/bevy_diesel"
+keywords = ["bevy", "avian", "physics", "gamedev"]
+categories = ["game-development", "game-engines"]
 
 [dependencies]
 bevy_diesel = { path = "../.." }

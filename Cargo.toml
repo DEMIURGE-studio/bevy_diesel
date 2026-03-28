@@ -2,6 +2,12 @@
 name = "bevy_diesel"
 version = "0.1.0"
 edition = "2024"
+description = "A generic ability engine framework for Bevy"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_diesel"
+homepage = "https://github.com/DEMIURGE-studio/bevy_diesel"
+keywords = ["bevy", "abilities", "gamedev", "ecs"]
+categories = ["game-development", "game-engines"]
 
 [dependencies]
 bevy = "0.18.0"
