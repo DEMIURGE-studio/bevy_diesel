@@ -104,82 +104,64 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
 
     commands.entity(entity).with_children(|parent| {
         let flying = parent
-            .spawn((Name::new("Flying"), SubstateOf(entity), InvokedBy(entity)))
+            .spawn_substate(entity, (Name::new("Flying"), InvokedBy(entity)))
             .id();
 
-        // Spawn explosion at collision point
-        parent.spawn((
-            Name::new("SpawnExplosion"),
-            SubstateOf(flying),
-            SubEffectOf(flying),
-            InvokedBy(entity),
-            SpawnConfig::at_passed("explosion"),
-        ));
+        parent.spawn_subeffect(
+            flying,
+            entity,
+            (
+                Name::new("SpawnExplosion"),
+                SpawnConfig::at_passed("explosion"),
+            ),
+        );
 
-        // Decrement ProjectileLife on root
         let life_targeting = parent
-            .spawn((
-                Name::new("DecrementLife"),
-                SubstateOf(flying),
-                SubEffectOf(flying),
-                InvokedBy(entity),
-                TargetMutator::root(),
-            ))
+            .spawn_subeffect(
+                flying,
+                entity,
+                (Name::new("DecrementLife"), TargetMutator::root()),
+            )
             .id();
 
-        parent.spawn((
-            Name::new("DecrementLifeInstant"),
-            SubstateOf(life_targeting),
-            SubEffectOf(life_targeting),
-            InvokedBy(entity),
-            bevy_diesel::bevy_gauge::instant! {
-                "ProjectileLife" -= 1.0,
-            },
-        ));
+        parent.spawn_subeffect(
+            life_targeting,
+            entity,
+            (
+                Name::new("DecrementLifeInstant"),
+                bevy_diesel::bevy_gauge::instant! { "ProjectileLife" -= 1.0 },
+            ),
+        );
 
         let done = parent
-            .spawn((
-                Name::new("Done"),
-                SubstateOf(entity),
-                StateComponent(DelayedDespawn::now()),
-                PrintLn::new("Despawn projectile!!"),
-            ))
+            .spawn_substate(
+                entity,
+                (Name::new("Done"), StateComponent(DelayedDespawn::now())),
+            )
             .id();
 
-        // Flying →[collision]→ Flying (self-transition re-fires sub-effects)
-        parent.spawn((
-            Name::new("Flying→Flying (collision)"),
-            Source(flying),
-            bevy_gearbox::prelude::Target(flying),
-            EventEdge::<CollidedEntity>::default(),
-        ));
+        parent.spawn_transition::<CollidedEntity>(flying, flying);
 
-        // Root →[always + guard]→ Done (when ProjectileLife depleted)
-        parent.spawn((
-            Name::new("Root→Done (depleted)"),
-            Source(entity),
-            bevy_gearbox::prelude::Target(done),
-            Guards::init(["stat_req_unmet"]),
-            bevy_diesel::bevy_gauge::requires! { "ProjectileLife <= 0" },
-            RequiresStatsOf(entity),
-            AlwaysEdge,
-        ));
+        parent.build_transition_always(entity, done, |t| {
+            t.init_guard(bevy_diesel::bevy_gauge::requires! { "ProjectileLife <= 0" })
+                .insert(RequiresStatsOf(entity));
+        });
 
-        // Root
         let commands = parent.commands_mut();
-        commands.entity(entity).insert((
-            Name::new("ExplosiveProjectile"),
-            ProjectileMarker,
-            ProjectileEffect::new(20.0),
-            TeamFilter::Enemies,
-            CollisionLayers::new([Layer::Projectile], [Layer::Terrain, Layer::Character]),
-            Visibility::Inherited,
-            bevy_diesel::bevy_gauge::attributes! {
-                "ProjectileLife" => 1.0,
-            },
-            StateMachine::new(),
-            InitialState(flying),
-        ));
+        commands
+            .entity(entity)
+            .insert((
+                Name::new("ExplosiveProjectile"),
+                ProjectileMarker,
+                ProjectileEffect::new(20.0),
+                TeamFilter::Enemies,
+                CollisionLayers::new([Layer::Projectile], [Layer::Terrain, Layer::Character]),
+                Visibility::Inherited,
+                bevy_diesel::bevy_gauge::attributes! {
+                    "ProjectileLife" => 1.0,
+                },
+            ))
+            .init_state_machine(flying);
     });
 
     entity
@@ -193,45 +175,28 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn((Name::new("Ready"), SubstateOf(entity))).id();
+        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
+        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
 
-        let invoke = parent.spawn((Name::new("Invoke"), SubstateOf(entity))).id();
+        parent.spawn_subeffect(
+            invoke,
+            entity,
+            (
+                Name::new("SpawnProjectile"),
+                SpawnConfig::at_invoker("explosive_projectile")
+                    .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
+                    .with_target_generator(TargetGenerator::at_invoker_target()),
+            ),
+        );
 
-        // Spawn projectile at invoker, aimed at invoker's target
-        parent.spawn((
-            Name::new("SpawnProjectile"),
-            SubstateOf(invoke),
-            SubEffectOf(invoke),
-            InvokedBy(entity),
-            SpawnConfig::at_invoker("explosive_projectile")
-                .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
-                .with_target_generator(TargetGenerator::at_invoker_target()),
-        ));
+        parent.spawn_transition::<StartInvoke>(ready, invoke);
+        parent.spawn_transition_always(invoke, ready);
 
-        // Ready →[StartInvoke]→ Invoke
-        parent.spawn((
-            Name::new("Ready→Invoke"),
-            Source(ready),
-            bevy_gearbox::prelude::Target(invoke),
-            EventEdge::<StartInvoke>::default(),
-        ));
-
-        // Invoke →[always]→ Ready (re-arm)
-        parent.spawn((
-            Name::new("Invoke→Ready"),
-            Source(invoke),
-            bevy_gearbox::prelude::Target(ready),
-            AlwaysEdge,
-        ));
-
-        // Root
         let commands = parent.commands_mut();
-        commands.entity(entity).insert((
-            Name::new("Fireball Ability"),
-            Ability,
-            StateMachine::new(),
-            InitialState(ready),
-        ));
+        commands
+            .entity(entity)
+            .insert((Name::new("Fireball Ability"), Ability))
+            .init_state_machine(ready);
     });
 
     entity
@@ -246,66 +211,47 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
 
     commands.entity(entity).with_children(|parent| {
         let repeating = parent
-            .spawn((Name::new("Repeating"), SubstateOf(entity), Repeater::new(5)))
+            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(5)))
             .id();
 
         let spawn_wave = parent
-            .spawn((
-                Name::new("SpawnWave"),
-                SubstateOf(entity),
-                InvokedBy(entity),
-                // Spawn explosive_projectiles in a circle around this zone's position
-                SpawnConfig::at_root("explosive_projectile").with_gatherer(AvianGatherer::Circle {
-                    radius: 4.0,
-                    count: NumberType::Fixed(3),
-                }),
-            ))
+            .spawn_substate(
+                entity,
+                (
+                    Name::new("SpawnWave"),
+                    InvokedBy(entity),
+                    SpawnConfig::at_root("explosive_projectile").with_gatherer(
+                        AvianGatherer::Circle {
+                            radius: 4.0,
+                            count: NumberType::Fixed(3),
+                        },
+                    ),
+                ),
+            )
             .id();
 
         let done = parent
-            .spawn((
-                Name::new("Done"),
-                SubstateOf(entity),
-                StateComponent(DelayedDespawn::now()),
-            ))
+            .spawn_substate(
+                entity,
+                (Name::new("Done"), StateComponent(DelayedDespawn::now())),
+            )
             .id();
 
-        // Repeating →[OnRepeat]→ SpawnWave
-        parent.spawn((
-            Name::new("Repeating→SpawnWave"),
-            Source(repeating),
-            bevy_gearbox::prelude::Target(spawn_wave),
-            EventEdge::<OnRepeat>::default(),
-        ));
+        parent.spawn_transition::<OnRepeat>(repeating, spawn_wave);
+        parent
+            .spawn_transition_always(spawn_wave, repeating)
+            .with_delay(Duration::from_millis(600));
+        parent.spawn_transition::<OnComplete>(repeating, done);
 
-        // SpawnWave →[always+delay]→ Repeating
-        parent.spawn((
-            Name::new("SpawnWave→Repeating"),
-            Source(spawn_wave),
-            bevy_gearbox::prelude::Target(repeating),
-            AlwaysEdge,
-            Delay {
-                duration: Duration::from_millis(600),
-            },
-        ));
-
-        // Repeating →[OnComplete]→ Done
-        parent.spawn((
-            Name::new("Repeating→Done"),
-            Source(repeating),
-            bevy_gearbox::prelude::Target(done),
-            EventEdge::<OnComplete>::default(),
-        ));
-
-        // Root
         let commands = parent.commands_mut();
-        commands.entity(entity).insert((
-            Name::new("Firestorm Zone"),
-            FirestormZoneMarker,
-            Visibility::Inherited,
-            StateMachine::new(),
-            InitialState(repeating),
-        ));
+        commands
+            .entity(entity)
+            .insert((
+                Name::new("Firestorm Zone"),
+                FirestormZoneMarker,
+                Visibility::Inherited,
+            ))
+            .init_state_machine(repeating);
     });
 
     entity
@@ -319,44 +265,27 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn((Name::new("Ready"), SubstateOf(entity))).id();
+        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
+        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
 
-        let invoke = parent.spawn((Name::new("Invoke"), SubstateOf(entity))).id();
+        parent.spawn_subeffect(
+            invoke,
+            entity,
+            (
+                Name::new("SpawnZone"),
+                SpawnConfig::at_passed("firestorm_zone")
+                    .with_offset(Vec3Offset::Fixed(Vec3::new(0.0, 8.0, 0.0))),
+            ),
+        );
 
-        // Spawn firestorm_zone at target, elevated
-        parent.spawn((
-            Name::new("SpawnZone"),
-            SubstateOf(invoke),
-            SubEffectOf(invoke),
-            InvokedBy(entity),
-            SpawnConfig::at_passed("firestorm_zone")
-                .with_offset(Vec3Offset::Fixed(Vec3::new(0.0, 8.0, 0.0))),
-        ));
+        parent.spawn_transition::<StartInvoke>(ready, invoke);
+        parent.spawn_transition_always(invoke, ready);
 
-        // Ready →[StartInvoke]→ Invoke
-        parent.spawn((
-            Name::new("Ready→Invoke"),
-            Source(ready),
-            bevy_gearbox::prelude::Target(invoke),
-            EventEdge::<StartInvoke>::default(),
-        ));
-
-        // Invoke →[always]→ Ready
-        parent.spawn((
-            Name::new("Invoke→Ready"),
-            Source(invoke),
-            bevy_gearbox::prelude::Target(ready),
-            AlwaysEdge,
-        ));
-
-        // Root
         let commands = parent.commands_mut();
-        commands.entity(entity).insert((
-            Name::new("Firestorm Ability"),
-            Ability,
-            StateMachine::new(),
-            InitialState(ready),
-        ));
+        commands
+            .entity(entity)
+            .insert((Name::new("Firestorm Ability"), Ability))
+            .init_state_machine(ready);
     });
 
     entity
@@ -546,12 +475,12 @@ fn setup_assets(
 
 fn attach_visuals(
     mut commands: Commands,
-    q_projectiles: Query<Entity, Added<ProjectileMarker>>,
+    q_projectiles: Query<(Entity, &Transform), Added<ProjectileMarker>>,
     q_explosions: Query<Entity, Added<ExplosionMarker>>,
     q_zones: Query<Entity, Added<FirestormZoneMarker>>,
     assets: Res<VisualAssets>,
 ) {
-    for entity in q_projectiles.iter() {
+    for (entity, transform) in q_projectiles.iter() {
         commands.entity(entity).insert((
             Mesh3d(assets.projectile_mesh.clone()),
             MeshMaterial3d(assets.projectile_material.clone()),

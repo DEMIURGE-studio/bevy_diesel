@@ -117,6 +117,50 @@ impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
 }
 
 // ---------------------------------------------------------------------------
+// StopInvoke<P> - stop a channeled/held ability
+// ---------------------------------------------------------------------------
+
+/// Stops a held or channeled ability invocation.
+#[derive(EntityEvent, Clone, Debug, Reflect)]
+pub struct StopInvoke<P: PosBound> {
+    #[event_target]
+    pub entity: Entity,
+    #[reflect(ignore)]
+    pub targets: Vec<Target<P>>,
+}
+
+impl<P: PosBound> StopInvoke<P> {
+    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
+        Self { entity, targets }
+    }
+}
+
+impl<P: PosBound> TransitionEvent for StopInvoke<P> {
+    type ExitEvent = bevy_gearbox::NoEvent;
+    type EdgeEvent = bevy_gearbox::NoEvent;
+    type EntryEvent = GoOff<P>;
+    type Validator = bevy_gearbox::AcceptAll;
+
+    fn to_entry_event(
+        &self,
+        entering: Entity,
+        _exiting: Entity,
+        _edge: Entity,
+    ) -> Option<GoOff<P>> {
+        Some(GoOff::new(entering, self.targets.clone()))
+    }
+}
+
+impl<P: PosBound> From<Vec<Target<P>>> for StopInvoke<P> {
+    fn from(value: Vec<Target<P>>) -> Self {
+        Self {
+            entity: Entity::PLACEHOLDER,
+            targets: value,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CollidedEntity<P> - collision event carrying entity targets
 // ---------------------------------------------------------------------------
 

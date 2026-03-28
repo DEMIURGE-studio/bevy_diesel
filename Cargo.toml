@@ -13,5 +13,5 @@ categories = ["game-development", "game-engines"]
 bevy = "0.18.0"
 rand = "0.9"
 inventory = "0.3"
-bevy_gauge = "0.4.4"
-bevy_gearbox = "0.5.2"
+bevy_gauge = { path = "../bevy_gauge", features = ["gearbox"] }
+bevy_gearbox = { path = "../bevy_gearbox" }

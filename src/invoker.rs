@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_gauge::prelude::{Attributes, AttributesMut};
 
 // ---------------------------------------------------------------------------
 // InvokedBy / Invokes
@@ -49,4 +50,31 @@ pub fn resolve_invoker(q_invoker: &Query<&InvokedBy>, entity: Entity) -> Entity 
 /// Walk the `ChildOf` chain to find the root ancestor entity.
 pub fn resolve_root(q_child_of: &Query<&ChildOf>, entity: Entity) -> Entity {
     q_child_of.root_ancestor(entity)
+}
+
+// ---------------------------------------------------------------------------
+// Gauge source auto-registration
+// ---------------------------------------------------------------------------
+
+/// Register the root invoker as a gauge attribute source when `InvokedBy` is added.
+pub(crate) fn register_invoker_source(
+    add: On<Add, InvokedBy>,
+    q_invoker: Query<&InvokedBy>,
+    mut attributes: AttributesMut,
+) {
+    let entity = add.entity;
+    let invoker = q_invoker.root_ancestor(entity);
+    attributes.register_source(entity, "invoked_by", invoker);
+}
+
+/// Update gauge sources when `InvokedBy` changes on entities that have `Attributes`.
+pub(crate) fn on_invoked_by_changed_system(
+    q_changed: Query<Entity, (Changed<InvokedBy>, With<Attributes>)>,
+    q_invoker: Query<&InvokedBy>,
+    mut attributes: AttributesMut,
+) {
+    for entity in q_changed.iter() {
+        let invoker = q_invoker.root_ancestor(entity);
+        attributes.register_source(entity, "invoked_by", invoker);
+    }
 }

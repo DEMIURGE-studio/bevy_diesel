@@ -5,7 +5,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_gearbox::RegistrationAppExt;
 
-use crate::events::{CollidedEntity, CollidedPosition, OnRepeat, StartInvoke};
+use crate::events::{CollidedEntity, CollidedPosition, OnRepeat, StartInvoke, StopInvoke};
 use crate::gearbox::repeater;
 use crate::spawn::{OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget};
 use crate::target::Target;
@@ -135,12 +135,20 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
 
         // Register transition events
         app.register_transition::<StartInvoke<B::Pos>>();
+        app.register_transition::<StopInvoke<B::Pos>>();
         app.register_transition::<OnRepeat<B::Pos>>();
         app.register_transition::<CollidedEntity<B::Pos>>();
         app.register_transition::<CollidedPosition<B::Pos>>();
         app.register_transition::<OnSpawnOrigin<B::Pos>>();
         app.register_transition::<OnSpawnTarget<B::Pos>>();
         app.register_transition::<OnSpawnInvoker<B::Pos>>();
+
+        // Ability pool (RegisterAbility / UnregisterAbility observers)
+        app.add_plugins(crate::ability_pool::DieselAbilityPoolPlugin);
+
+        // Invoker → gauge source auto-registration
+        app.add_observer(crate::invoker::register_invoker_source);
+        app.add_systems(Update, crate::invoker::on_invoked_by_changed_system);
 
         // Propagation (inventory-based event forwarding)
         crate::propagation::plugin(app);

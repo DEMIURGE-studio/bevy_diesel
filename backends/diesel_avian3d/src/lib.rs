@@ -1,6 +1,6 @@
+use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use avian3d::prelude::*;
 use rand::RngCore;
 
 use bevy_diesel::prelude::*;
@@ -15,24 +15,25 @@ pub mod projectile;
 pub mod velocity;
 
 pub mod prelude {
-    pub use bevy_diesel::prelude::*;
-    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
-    pub use crate::collision::CollisionFilterPlugin;
     pub use crate::ballistics::{
-        calculate_low_angle_velocity_with_speed, calculate_high_angle_velocity_with_speed,
+        calculate_high_angle_velocity_with_speed, calculate_low_angle_velocity_with_speed,
         calculate_velocity_with_speed, distance_lock,
     };
+    pub use crate::collision::CollisionFilterPlugin;
     pub use crate::projectile::{
-        ProjectileEffect, LinearProjectileEffect, LinearProjectile, ProjectilePlugin,
+        LinearProjectile, LinearProjectileEffect, ProjectileEffect, ProjectilePlugin,
     };
-    pub use crate::velocity::{VelocityEffect, Trajectory, VelocityEffectPlugin};
-    pub use crate::{on_spawn_origin, on_spawn_target, on_spawn_invoker};
+    pub use crate::velocity::{Trajectory, VelocityEffect, VelocityEffectPlugin};
+    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
+    pub use crate::{on_spawn_invoker, on_spawn_origin, on_spawn_target};
+    pub use bevy_diesel::prelude::*;
 
     // Vec3 type aliases
     pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
     pub type Target = bevy_diesel::target::Target<bevy::math::Vec3>;
     pub type GoOff = bevy_diesel::effect::GoOff<bevy::math::Vec3>;
     pub type StartInvoke = bevy_diesel::events::StartInvoke<bevy::math::Vec3>;
+    pub type StopInvoke = bevy_diesel::events::StopInvoke<bevy::math::Vec3>;
     pub type OnRepeat = bevy_diesel::events::OnRepeat<bevy::math::Vec3>;
     pub type CollidedEntity = bevy_diesel::events::CollidedEntity<bevy::math::Vec3>;
     pub type CollidedPosition = bevy_diesel::events::CollidedPosition<bevy::math::Vec3>;
@@ -144,9 +145,13 @@ impl SpatialBackend for AvianBackend {
             // Entity gatherers - query avian3d spatial index
             AvianGatherer::EntitiesInSphere(radius)
             | AvianGatherer::EntitiesInCircle(radius)
-            | AvianGatherer::AllEntitiesInRadius(radius) => {
-                find_entities_in_radius(origin, *radius, &ctx.spatial_query, exclude, &ctx.transforms)
-            }
+            | AvianGatherer::AllEntitiesInRadius(radius) => find_entities_in_radius(
+                origin,
+                *radius,
+                &ctx.spatial_query,
+                exclude,
+                &ctx.transforms,
+            ),
             AvianGatherer::NearestEntities(radius) => {
                 let mut targets = find_entities_in_radius(
                     origin,
@@ -243,9 +248,18 @@ fn apply_vec3_offset(offset: &Vec3Offset, rng: &mut dyn RngCore) -> Vec3 {
 #[derive(Clone, Debug)]
 pub enum AvianGatherer {
     // Position generators - produce N random points around origin
-    Sphere { radius: f32, count: NumberType },
-    Circle { radius: f32, count: NumberType },
-    Box { half_extents: Vec3, count: NumberType },
+    Sphere {
+        radius: f32,
+        count: NumberType,
+    },
+    Circle {
+        radius: f32,
+        count: NumberType,
+    },
+    Box {
+        half_extents: Vec3,
+        count: NumberType,
+    },
     Line {
         direction: Vec3,
         length: f32,
@@ -303,10 +317,7 @@ impl Plugin for AvianDieselPlugin {
         app.add_observer(bevy_diesel::gauge::instant::instant_set_observer::<Vec3>);
 
         // Avian3d-specific actions
-        app.add_plugins((
-            projectile::ProjectilePlugin,
-            velocity::VelocityEffectPlugin,
-        ));
+        app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
 
         // Collision system (unfiltered - entities with Collides marker)
         collision::plugin(app);
@@ -318,17 +329,17 @@ impl Plugin for AvianDieselPlugin {
 // ---------------------------------------------------------------------------
 
 /// Forward OnSpawnOrigin<Vec3> to GoOff. Use with `.observe(on_spawn_origin)`.
-pub fn on_spawn_origin(ev: On<bevy_diesel::spawn::OnSpawnOrigin<Vec3>>, mut commands: Commands) {
+pub fn on_spawn_origin(ev: On<bevy_diesel::spawn::OnSpawnOrigin<Vec3>>, commands: Commands) {
     bevy_diesel::spawn::on_spawn_origin::<Vec3>(ev, commands);
 }
 
 /// Forward OnSpawnTarget<Vec3> to GoOff. Use with `.observe(on_spawn_target)`.
-pub fn on_spawn_target(ev: On<bevy_diesel::spawn::OnSpawnTarget<Vec3>>, mut commands: Commands) {
+pub fn on_spawn_target(ev: On<bevy_diesel::spawn::OnSpawnTarget<Vec3>>, commands: Commands) {
     bevy_diesel::spawn::on_spawn_target::<Vec3>(ev, commands);
 }
 
 /// Forward OnSpawnInvoker<Vec3> to GoOff. Use with `.observe(on_spawn_invoker)`.
-pub fn on_spawn_invoker(ev: On<bevy_diesel::spawn::OnSpawnInvoker<Vec3>>, mut commands: Commands) {
+pub fn on_spawn_invoker(ev: On<bevy_diesel::spawn::OnSpawnInvoker<Vec3>>, commands: Commands) {
     bevy_diesel::spawn::on_spawn_invoker::<Vec3>(ev, commands);
 }
 

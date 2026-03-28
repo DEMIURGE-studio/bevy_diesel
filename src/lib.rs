@@ -13,6 +13,7 @@ pub mod pipeline;
 pub mod print;
 pub mod propagation;
 pub mod spawn;
+pub mod subeffects;
 pub mod target;
 
 // Re-export upstream dependencies
@@ -24,7 +25,7 @@ pub mod prelude {
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
     pub use crate::effect::{GoOff, SubEffectOf, SubEffects};
-    pub use crate::events::{StartInvoke, OnRepeat, CollidedEntity, CollidedPosition};
+    pub use crate::events::{StartInvoke, StopInvoke, OnRepeat, CollidedEntity, CollidedPosition};
     pub use crate::invoker::{InvokedBy, Invokes, resolve_invoker, resolve_root};
     pub use crate::pipeline::{generate_targets, propagate_observer};
     pub use crate::print::PrintLn;
@@ -44,6 +45,8 @@ pub mod prelude {
     pub use bevy_gearbox::prelude::{
         AlwaysEdge, Delay, EnterState, EventEdge, ExitState,
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
+        SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
+        GuardProvider,
     };
     pub use bevy_gearbox::transitions::{NoEvent, TransitionEvent, EventValidator};
     pub use crate::propagation::{
@@ -51,6 +54,7 @@ pub mod prelude {
         RegisterPropagationTarget, PropagationRegistrar,
         register_propagation_for, propagate_event,
     };
+    pub use crate::subeffects::SpawnSubEffect;
     pub use crate::submit_propagation_for;
     pub use crate::despawn::{QueueDespawn, DelayedDespawn};
     pub use crate::invoke::{Ability, InvokeStatus, InvocationComplete, check_should_reinvoke_ability};
