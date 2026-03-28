@@ -8,4 +8,4 @@ bevy_diesel = { path = "../.." }
 bevy = "0.18.0"
 avian3d = "0.5"
 rand = "0.9"
-bevy_gearbox = { git = "https://github.com/DEMIURGE-studio/bevy_gearbox", branch = "main" }
+bevy_gearbox = "0.5.2"

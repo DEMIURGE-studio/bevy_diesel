@@ -7,5 +7,5 @@ edition = "2024"
 bevy = "0.18.0"
 rand = "0.9"
 inventory = "0.3"
-bevy_gauge = { git = "https://github.com/DEMIURGE-studio/bevy_gauge", branch = "main" }
-bevy_gearbox = { git = "https://github.com/DEMIURGE-studio/bevy_gearbox", branch = "main" }
+bevy_gauge = "0.4.4"
+bevy_gearbox = "0.5.2"
