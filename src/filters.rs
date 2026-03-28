@@ -7,25 +7,65 @@ use crate::backend::SpatialBackend;
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
-// Utility types — opt-in building blocks for backends
+// CollisionFilter — generic trait for collision/target filtering
 // ---------------------------------------------------------------------------
 
-/// Team filtering mode. Backends can embed this in their Filter type.
-#[derive(Component, Clone, Debug)]
-pub enum TeamFilter {
-    /// Target any team.
-    Both,
-    /// Target entities on the same team as the invoker.
-    Allies,
-    /// Target entities on a different team from the invoker.
-    Enemies,
-    /// Target entities on a specific team.
-    Specific(u32),
+/// A generic filter for determining whether an ability can affect a target entity.
+///
+/// Backends use this to filter collisions and target resolution. Users implement
+/// this trait for their own faction/alliance/team system.
+///
+/// - `Self` is the filter component placed on ability entities (e.g. your `TeamFilter`)
+/// - `Self::Lookup` is the component queried on invoker/target entities (e.g. your `Team`)
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Component, Clone, Debug)]
+/// pub enum Faction { Allies, Enemies, Both }
+///
+/// #[derive(Component, Clone, Copy)]
+/// pub struct Alliance(pub u32);
+///
+/// impl CollisionFilter for Faction {
+///     type Lookup = Alliance;
+///     fn can_target(&self, invoker: Option<&Alliance>, target: Option<&Alliance>) -> bool {
+///         match (self, invoker, target) {
+///             (Faction::Both, _, _) => true,
+///             (Faction::Allies, Some(i), Some(t)) => i.0 == t.0,
+///             (Faction::Enemies, Some(i), Some(t)) => i.0 != t.0,
+///             _ => true,
+///         }
+///     }
+/// }
+/// ```
+pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
+    /// The component to look up on invoker and target entities.
+    type Lookup: Component;
+
+    /// Return `true` if the ability should affect this target.
+    ///
+    /// `invoker_data` is the `Lookup` component on the root invoker entity.
+    /// `target_data` is the `Lookup` component on the potential target entity.
+    /// Either may be `None` if the entity doesn't have the component.
+    fn can_target(
+        &self,
+        invoker_data: Option<&Self::Lookup>,
+        target_data: Option<&Self::Lookup>,
+    ) -> bool;
 }
 
-/// Team marker component. Entities with the same `Team(n)` are allies.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-pub struct Team(pub u32);
+/// Simple marker component that opts an entity into collision events
+/// without any filtering. Every collision fires an event.
+///
+/// For filtered collisions (faction/team-based), implement the `CollisionFilter`
+/// trait and register `CollisionFilterPlugin<F>` in your app.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Collides;
+
+// ---------------------------------------------------------------------------
+// Utility types
+// ---------------------------------------------------------------------------
 
 /// Count specification: fixed or random range.
 /// Used by position-generator Gatherer variants (embedded count) and
@@ -56,37 +96,6 @@ impl NumberType {
 // ---------------------------------------------------------------------------
 // Utility functions — backends call these in their filter logic
 // ---------------------------------------------------------------------------
-
-/// Filter targets by team affiliation relative to the invoker.
-///
-/// Position-only targets (entity: None) always pass through.
-/// Entities without a team are filtered out.
-pub fn filter_by_team<P: Clone + Copy + Send + Sync + Default + Debug + 'static>(
-    targets: Vec<Target<P>>,
-    invoker_team: u32,
-    filter: &TeamFilter,
-    team_of: &dyn Fn(Entity) -> Option<u32>,
-) -> Vec<Target<P>> {
-    targets
-        .into_iter()
-        .filter(|target| {
-            let Some(entity) = target.entity else {
-                return true; // position-only targets pass through
-            };
-
-            let Some(entity_team) = team_of(entity) else {
-                return false; // entities without teams are filtered out
-            };
-
-            match filter {
-                TeamFilter::Both => true,
-                TeamFilter::Allies => invoker_team == entity_team,
-                TeamFilter::Enemies => invoker_team != entity_team,
-                TeamFilter::Specific(team_id) => entity_team == *team_id,
-            }
-        })
-        .collect()
-}
 
 /// Limit the number of targets using reservoir sampling for random selection.
 pub fn limit_count<P: Clone + Copy + Send + Sync + Default + Debug + 'static>(

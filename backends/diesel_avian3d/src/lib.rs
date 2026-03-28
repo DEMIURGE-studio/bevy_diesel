@@ -11,7 +11,10 @@ use bevy_diesel::prelude::*;
 
 pub use bevy_diesel;
 
+pub mod ballistics;
 pub mod collision;
+pub mod projectile;
+pub mod velocity;
 
 pub mod prelude {
     // Re-export everything from diesel core (includes gauge, gearbox, bevy_gauge, bevy_gearbox)
@@ -19,16 +22,25 @@ pub mod prelude {
 
     // Backend-specific types
     pub use crate::{
-        AvianBackend, AvianDieselPlugin, AvianFilter, AvianGatherer, Vec3Offset,
+        AvianBackend, AvianFilter, AvianGatherer, Vec3Offset,
     };
 
-    // Collision trigger events
-    pub use crate::collision::{CollidedEntity, CollidedPosition};
+    // Collision
+    pub use crate::collision::CollisionFilterPlugin;
 
-    // Spawn events — Vec3 aliases of the generic core types
-    pub type OnSpawnOrigin = bevy_diesel::spawn::OnSpawnOrigin<bevy::math::Vec3>;
-    pub type OnSpawnTarget = bevy_diesel::spawn::OnSpawnTarget<bevy::math::Vec3>;
-    pub type OnSpawnInvoker = bevy_diesel::spawn::OnSpawnInvoker<bevy::math::Vec3>;
+    // Ballistics
+    pub use crate::ballistics::{
+        calculate_low_angle_velocity_with_speed, calculate_high_angle_velocity_with_speed,
+        calculate_velocity_with_speed, distance_lock,
+    };
+
+    // Projectile effects
+    pub use crate::projectile::{
+        ProjectileEffect, LinearProjectileEffect, LinearProjectile, ProjectilePlugin,
+    };
+
+    // Velocity effect
+    pub use crate::velocity::{VelocityEffect, Trajectory, VelocityEffectPlugin};
 
     // Concrete Vec3 spawn observer helpers — use with .observe(on_spawn_origin) etc.
     pub use crate::{on_spawn_origin, on_spawn_target, on_spawn_invoker};
@@ -37,6 +49,13 @@ pub mod prelude {
     pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
     pub type Target = bevy_diesel::target::Target<bevy::math::Vec3>;
     pub type GoOff = bevy_diesel::effect::GoOff<bevy::math::Vec3>;
+    pub type StartInvoke = bevy_diesel::events::StartInvoke<bevy::math::Vec3>;
+    pub type OnRepeat = bevy_diesel::events::OnRepeat<bevy::math::Vec3>;
+    pub type CollidedEntity = bevy_diesel::events::CollidedEntity<bevy::math::Vec3>;
+    pub type CollidedPosition = bevy_diesel::events::CollidedPosition<bevy::math::Vec3>;
+    pub type OnSpawnOrigin = bevy_diesel::spawn::OnSpawnOrigin<bevy::math::Vec3>;
+    pub type OnSpawnTarget = bevy_diesel::spawn::OnSpawnTarget<bevy::math::Vec3>;
+    pub type OnSpawnInvoker = bevy_diesel::spawn::OnSpawnInvoker<bevy::math::Vec3>;
     pub type TargetType = bevy_diesel::target::TargetType<bevy::math::Vec3>;
     pub type TargetGenerator = bevy_diesel::target::TargetGenerator<crate::AvianBackend>;
     pub type TargetMutator = bevy_diesel::target::TargetMutator<crate::AvianBackend>;
@@ -51,7 +70,6 @@ pub mod prelude {
 pub struct AvianContext<'w, 's> {
     pub spatial_query: SpatialQuery<'w, 's>,
     pub transforms: Query<'w, 's, &'static Transform>,
-    pub teams: Query<'w, 's, &'static Team>,
     rng: Local<'s, SplitMix64>,
 }
 
@@ -164,17 +182,9 @@ impl SpatialBackend for AvianBackend {
         ctx: &mut AvianContext,
         mut targets: Vec<bevy_diesel::target::Target<Vec3>>,
         filter: &AvianFilter,
-        invoker: Entity,
+        _invoker: Entity,
         _origin: Vec3,
     ) -> Vec<bevy_diesel::target::Target<Vec3>> {
-        // Team filtering
-        if let Some(team_filter) = &filter.team {
-            if let Some(inv_team) = ctx.teams.get(invoker).ok().map(|t| t.0) {
-                let team_of = |e: Entity| -> Option<u32> { ctx.teams.get(e).ok().map(|t| t.0) };
-                targets = filter_by_team(targets, inv_team, team_filter, &team_of);
-            }
-        }
-
         // TODO: line_of_sight filtering using ctx.spatial_query
 
         // Count limiting
@@ -197,6 +207,10 @@ impl SpatialBackend for AvianBackend {
             }
         }
         Transform::from_translation(world_pos)
+    }
+
+    fn plugin() -> impl Plugin {
+        AvianDieselPlugin
     }
 }
 
@@ -275,8 +289,6 @@ pub enum AvianGatherer {
 /// Backend-specific post-gather filter configuration.
 #[derive(Clone, Debug)]
 pub struct AvianFilter {
-    /// Team affiliation filter (diesel utility type).
-    pub team: Option<TeamFilter>,
     /// Count limit for entity gatherers (diesel utility type).
     pub count: Option<NumberType>,
     /// Backend-specific: require line-of-sight to target.
@@ -286,7 +298,6 @@ pub struct AvianFilter {
 impl Default for AvianFilter {
     fn default() -> Self {
         Self {
-            team: None,
             count: None,
             line_of_sight: false,
         }
@@ -297,20 +308,43 @@ impl Default for AvianFilter {
 // Plugin — one line to register the generic observer
 // ---------------------------------------------------------------------------
 
-/// Plugin that registers the diesel GoOff propagation observer for the avian3d backend.
-pub struct AvianDieselPlugin;
+/// Avian3d-specific plugin. Adds physics-based actions (projectile, kinematic projectile,
+/// velocity effect) and unfiltered collision handling on top of the core diesel infrastructure.
+///
+/// For faction/team-based collision filtering, also register `CollisionFilterPlugin<F>`.
+///
+/// # Usage
+///
+/// ```ignore
+/// app.add_plugins(AvianBackend::plugin());
+///
+/// // With additional filtered collisions:
+/// app.add_plugins((
+///     AvianBackend::plugin(),
+///     CollisionFilterPlugin::<MyTeamFilter>::default(),
+/// ));
+/// ```
+struct AvianDieselPlugin;
 
 impl Plugin for AvianDieselPlugin {
     fn build(&self, app: &mut App) {
-        use bevy_diesel::spawn::{OnSpawnOrigin, OnSpawnTarget, OnSpawnInvoker, spawn_observer};
-        use bevy_gearbox::RegistrationAppExt;
-        app.init_resource::<bevy_diesel::spawn::TemplateRegistry>()
-            .add_observer(propagate_observer::<AvianBackend>)
-            .add_observer(bevy_diesel::print::print_effect::<Vec3>)
-            .add_observer(spawn_observer::<AvianBackend>)
-            .register_transition::<OnSpawnOrigin<Vec3>>()
-            .register_transition::<OnSpawnTarget<Vec3>>()
-            .register_transition::<OnSpawnInvoker<Vec3>>();
+        // Core diesel infrastructure (gearbox, repeater, despawn, transitions, etc.)
+        app.add_plugins(AvianBackend::plugin_core());
+
+        // Backend-specific observers (require concrete position type or AvianContext)
+        app.add_observer(propagate_observer::<AvianBackend>);
+        app.add_observer(bevy_diesel::spawn::spawn_observer::<AvianBackend>);
+        app.add_observer(bevy_diesel::print::print_effect::<Vec3>);
+        app.add_observer(bevy_diesel::gauge::modifiers::modifier_set_observer::<Vec3>);
+        app.add_observer(bevy_diesel::gauge::instant::instant_set_observer::<Vec3>);
+
+        // Avian3d-specific actions
+        app.add_plugins((
+            projectile::ProjectilePlugin,
+            velocity::VelocityEffectPlugin,
+        ));
+
+        // Collision system (unfiltered — entities with Collides marker)
         collision::plugin(app);
     }
 }

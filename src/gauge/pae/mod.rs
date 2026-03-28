@@ -5,8 +5,8 @@ use bevy_gauge::prelude::*;
 use bevy_gearbox::prelude::*;
 
 use state_machine::{
-    ActivatedModifiers, AppliedModifiers, EffectTarget, PersistentAttributeEffect,
-    RequirementsOf, RequiresStatsOf, ActiveState, PAESuspend,
+    ActivatedModifiers, ActiveState, AppliedModifiers, EffectTarget, PAESuspend,
+    PersistentAttributeEffect, RequirementsOf, RequiresStatsOf,
 };
 
 pub use state_machine::{PaeEntities, pae_state_machine};
@@ -21,7 +21,11 @@ impl Plugin for DieselPaePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (stats_change_system, active_effects_watcher_system),
+            (
+                stats_change_system
+                    .before(bevy_gearbox::transitions::check_always_on_guards_changed),
+                active_effects_watcher_system,
+            ),
         )
         .add_observer(on_add_effect_target)
         .add_observer(on_remove_effect_target);
@@ -164,9 +168,7 @@ fn active_effects_watcher_system(
         let is_currently_active = q_active.contains(pae_entity);
 
         if !should_be_active && is_currently_active {
-            commands.trigger(PAESuspend {
-                target: pae_entity,
-            });
+            commands.trigger(PAESuspend { target: pae_entity });
         }
     }
 }

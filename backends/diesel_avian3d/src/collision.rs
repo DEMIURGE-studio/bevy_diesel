@@ -3,87 +3,179 @@ use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
 
-bevy_diesel::go_off!(CollidedEntity, Vec3);
-bevy_diesel::go_off!(CollidedPosition, Vec3);
+// ---------------------------------------------------------------------------
+// Unfiltered collision system — fires for any entity with `Collides` marker
+// ---------------------------------------------------------------------------
 
-pub fn plugin(app: &mut App) {
-    app.add_systems(Update, invoke_on_collision_system);
+pub(crate) fn plugin(app: &mut App) {
+    app.add_systems(Update, unfiltered_collision_system);
 }
 
-pub fn invoke_on_collision_system(
+fn unfiltered_collision_system(
     mut collision_events: MessageReader<CollisionStart>,
-    q_team_filter: Query<&TeamFilter>,
+    q_collides: Query<(), With<Collides>>,
     q_invoker: Query<&InvokedBy>,
-    q_team: Query<&Team>,
     q_position: Query<&Position>,
     collisions: Collisions,
     mut commands: Commands,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
-        handle_entity_collision(&q_team_filter, &q_invoker, &q_team, &q_position, &mut commands, *collider1, *collider2);
-        handle_entity_collision(&q_team_filter, &q_invoker, &q_team, &q_position, &mut commands, *collider2, *collider1);
+        // Entity collision events
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut commands, *collider1, *collider2);
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut commands, *collider2, *collider1);
 
+        // Position collision events
         if let Some(contacts) = collisions.get(*collider1, *collider2) {
             if let Some(contact) = contacts.find_deepest_contact() {
                 let position = contact.point;
-                handle_position_collision(&q_team_filter, &q_invoker, &q_team, &mut commands, position, *collider1, *collider2);
-                handle_position_collision(&q_team_filter, &q_invoker, &q_team, &mut commands, position, *collider2, *collider1);
+                emit_position_if(&q_collides, &mut commands, position, *collider1, *collider2);
+                emit_position_if(&q_collides, &mut commands, position, *collider2, *collider1);
             }
         }
     }
 }
 
-fn can_target(
-    q_team_filter: &Query<&TeamFilter>,
+fn emit_entity_if(
+    q_collides: &Query<(), With<Collides>>,
     q_invoker: &Query<&InvokedBy>,
-    q_team: &Query<&Team>,
-    ability: Entity,
-    target: Entity,
-) -> bool {
-    let Ok(team_filter) = q_team_filter.get(ability) else {
-        return false;
-    };
-    let invoker = q_invoker.root_ancestor(ability);
-    let Ok(invoker_team) = q_team.get(invoker) else {
-        return false;
-    };
-    match q_team.get(target) {
-        Ok(target_team) => match team_filter {
-            TeamFilter::Both => true,
-            TeamFilter::Allies => invoker_team.0 == target_team.0,
-            TeamFilter::Enemies => invoker_team.0 != target_team.0,
-            TeamFilter::Specific(id) => target_team.0 == *id,
-        },
-        Err(_) => true, // no team component — allow
-    }
-}
-
-fn handle_entity_collision(
-    q_team_filter: &Query<&TeamFilter>,
-    q_invoker: &Query<&InvokedBy>,
-    q_team: &Query<&Team>,
     q_position: &Query<&Position>,
     commands: &mut Commands,
     ability: Entity,
     target: Entity,
 ) {
-    if can_target(q_team_filter, q_invoker, q_team, ability, target) {
-        if let Ok(pos) = q_position.get(target) {
-            commands.trigger(CollidedEntity::new(ability, vec![Target::entity(target, pos.0)]));
-        }
+    if q_collides.get(ability).is_err() {
+        return;
     }
+    // Don't collide with own invoker chain
+    let invoker = q_invoker.root_ancestor(ability);
+    if target == invoker {
+        return;
+    }
+    let collision_pos = q_position.get(ability).ok().map(|p| p.0)
+        .or_else(|| q_position.get(target).ok().map(|p| p.0))
+        .unwrap_or(Vec3::ZERO);
+    commands.trigger(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
 }
 
-fn handle_position_collision(
-    q_team_filter: &Query<&TeamFilter>,
-    q_invoker: &Query<&InvokedBy>,
-    q_team: &Query<&Team>,
+fn emit_position_if(
+    q_collides: &Query<(), With<Collides>>,
     commands: &mut Commands,
     position: Vec3,
     ability: Entity,
     target: Entity,
 ) {
-    if can_target(q_team_filter, q_invoker, q_team, ability, target) {
+    if q_collides.get(ability).is_err() {
+        return;
+    }
+    commands.trigger(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
+}
+
+// ---------------------------------------------------------------------------
+// Filtered collision system — generic over CollisionFilter
+// ---------------------------------------------------------------------------
+
+/// Plugin that adds filtered collision handling for a specific `CollisionFilter` type.
+///
+/// Register alongside `AvianDieselPlugin` when you need faction/team-based collision filtering.
+/// Entities with an `F` component will have their collisions checked via `F::can_target()`.
+///
+/// # Example
+///
+/// ```ignore
+/// app.add_plugins((
+///     AvianDieselPlugin,
+///     CollisionFilterPlugin::<MyTeamFilter>::default(),
+/// ));
+/// ```
+pub struct CollisionFilterPlugin<F: CollisionFilter> {
+    _marker: std::marker::PhantomData<F>,
+}
+
+impl<F: CollisionFilter> Default for CollisionFilterPlugin<F> {
+    fn default() -> Self {
+        Self {
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<F: CollisionFilter> Plugin for CollisionFilterPlugin<F> {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, filtered_collision_system::<F>);
+    }
+}
+
+fn filtered_collision_system<F: CollisionFilter>(
+    mut collision_events: MessageReader<CollisionStart>,
+    q_filter: Query<&F>,
+    q_lookup: Query<&F::Lookup>,
+    q_invoker: Query<&InvokedBy>,
+    q_position: Query<&Position>,
+    collisions: Collisions,
+    mut commands: Commands,
+) {
+    for CollisionStart { collider1, collider2, .. } in collision_events.read() {
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut commands, *collider1, *collider2);
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut commands, *collider2, *collider1);
+
+        if let Some(contacts) = collisions.get(*collider1, *collider2) {
+            if let Some(contact) = contacts.find_deepest_contact() {
+                let position = contact.point;
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut commands, position, *collider1, *collider2);
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut commands, position, *collider2, *collider1);
+            }
+        }
+    }
+}
+
+fn can_target_filtered<F: CollisionFilter>(
+    q_filter: &Query<&F>,
+    q_lookup: &Query<&F::Lookup>,
+    q_invoker: &Query<&InvokedBy>,
+    ability: Entity,
+    target: Entity,
+) -> bool {
+    let Ok(filter) = q_filter.get(ability) else {
+        return false;
+    };
+    let invoker = q_invoker.root_ancestor(ability);
+    if target == invoker {
+        return false;
+    }
+    let invoker_data = q_lookup.get(invoker).ok();
+    let target_data = q_lookup.get(target).ok();
+    filter.can_target(invoker_data, target_data)
+}
+
+fn emit_entity_filtered<F: CollisionFilter>(
+    q_filter: &Query<&F>,
+    q_lookup: &Query<&F::Lookup>,
+    q_invoker: &Query<&InvokedBy>,
+    q_position: &Query<&Position>,
+    commands: &mut Commands,
+    ability: Entity,
+    target: Entity,
+) {
+    if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
+        // Use the ability's position as the collision point — for moving projectiles
+        // this is where the hit actually occurred, not the target's center.
+        let collision_pos = q_position.get(ability).ok().map(|p| p.0)
+            .or_else(|| q_position.get(target).ok().map(|p| p.0))
+            .unwrap_or(Vec3::ZERO);
+        commands.trigger(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
+    }
+}
+
+fn emit_position_filtered<F: CollisionFilter>(
+    q_filter: &Query<&F>,
+    q_lookup: &Query<&F::Lookup>,
+    q_invoker: &Query<&InvokedBy>,
+    commands: &mut Commands,
+    position: Vec3,
+    ability: Entity,
+    target: Entity,
+) {
+    if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
         commands.trigger(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
     }
 }
