@@ -309,12 +309,19 @@ impl Plugin for AvianDieselPlugin {
         // Core diesel infrastructure (gearbox, repeater, despawn, transitions, etc.)
         app.add_plugins(AvianBackend::plugin_core());
 
-        // Backend-specific observers (require concrete position type or AvianContext)
-        app.add_observer(propagate_observer::<AvianBackend>);
-        app.add_observer(bevy_diesel::spawn::spawn_observer::<AvianBackend>);
-        app.add_observer(bevy_diesel::print::print_effect::<Vec3>);
-        app.add_observer(bevy_diesel::gauge::modifiers::modifier_set_observer::<Vec3>);
-        app.add_observer(bevy_diesel::gauge::instant::instant_set_observer::<Vec3>);
+        // Propagation: reads GoOffOrigin, writes GoOff
+        app.add_systems(Update,
+            propagate_observer::<AvianBackend>
+                .in_set(bevy_diesel::DieselSet::Propagation),
+        );
+
+        // Leaf effect systems: read GoOff
+        app.add_systems(Update, (
+            bevy_diesel::spawn::spawn_observer::<AvianBackend>,
+            bevy_diesel::print::print_effect::<Vec3>,
+            bevy_diesel::gauge::modifiers::modifier_set_system::<Vec3>,
+            bevy_diesel::gauge::instant::instant_set_system::<Vec3>,
+        ).in_set(bevy_diesel::DieselSet::Effects));
 
         // Avian3d-specific actions
         app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
@@ -328,20 +335,12 @@ impl Plugin for AvianDieselPlugin {
 // Concrete Vec3 spawn observer helpers
 // ---------------------------------------------------------------------------
 
-/// Forward OnSpawnOrigin<Vec3> to GoOff. Use with `.observe(on_spawn_origin)`.
-pub fn on_spawn_origin(ev: On<bevy_diesel::spawn::OnSpawnOrigin<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_origin::<Vec3>(ev, commands);
-}
-
-/// Forward OnSpawnTarget<Vec3> to GoOff. Use with `.observe(on_spawn_target)`.
-pub fn on_spawn_target(ev: On<bevy_diesel::spawn::OnSpawnTarget<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_target::<Vec3>(ev, commands);
-}
-
-/// Forward OnSpawnInvoker<Vec3> to GoOff. Use with `.observe(on_spawn_invoker)`.
-pub fn on_spawn_invoker(ev: On<bevy_diesel::spawn::OnSpawnInvoker<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_invoker::<Vec3>(ev, commands);
-}
+// TODO: These were observer-based OnSpawn* → GoOff forwarders.
+// In the schedule version, the TransitionEvent::to_entry_event mechanism
+// is gone. Spawn-event side effects need a FrameTransitionLog-based system.
+pub fn on_spawn_origin() {}
+pub fn on_spawn_target() {}
+pub fn on_spawn_invoker() {}
 
 // ---------------------------------------------------------------------------
 // Spatial query helpers

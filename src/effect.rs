@@ -5,13 +5,34 @@ use bevy::prelude::*;
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
-// GoOff<P>
+// GoOffOrigin<P> — root trigger, consumed by propagate_system
 // ---------------------------------------------------------------------------
 
-/// Fires on an effect entity with resolved targets, triggering sub-effect propagation.
-#[derive(EntityEvent, Clone)]
+/// Written by SideEffect impls when a transition message fires. The
+/// propagation system walks the SubEffects tree starting at `entity` and
+/// writes a [`GoOff`] for every descendant effect.
+#[derive(Message, Clone)]
+pub struct GoOffOrigin<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
+    pub entity: Entity,
+    pub targets: Vec<Target<P>>,
+}
+
+impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
+    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
+        Self { entity, targets }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GoOff<P> — resolved per-effect message, consumed by leaf systems
+// ---------------------------------------------------------------------------
+
+/// A resolved "go off" for a single effect entity. Written by
+/// [`propagate_system`](crate::pipeline::propagate_system) after walking the
+/// SubEffects tree. Leaf systems (print, spawn, despawn, modifiers, etc.)
+/// read this.
+#[derive(Message, Clone)]
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
-    #[event_target]
     pub entity: Entity,
     pub targets: Vec<Target<P>>,
 }

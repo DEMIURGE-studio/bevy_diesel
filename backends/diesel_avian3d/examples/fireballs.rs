@@ -66,6 +66,45 @@ struct ProjectileMarker;
 #[derive(Component)]
 struct FirestormZoneMarker;
 
+// ---------------------------------------------------------------------------
+// ScaleFadeVfx - scales entity down to zero over duration, then despawns
+// ---------------------------------------------------------------------------
+
+#[derive(Component)]
+struct ScaleFadeVfx {
+    duration: f32,
+    elapsed: f32,
+    starting_scale: Option<f32>,
+}
+
+impl ScaleFadeVfx {
+    fn new(duration: f32) -> Self {
+        Self { duration, elapsed: 0.0, starting_scale: None }
+    }
+}
+
+fn scale_fade_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Transform, &mut ScaleFadeVfx)>,
+) {
+    for (entity, mut transform, mut fade) in query.iter_mut() {
+        if fade.starting_scale.is_none() {
+            fade.starting_scale = Some(transform.scale.x);
+        }
+        let Some(starting) = fade.starting_scale else { continue };
+
+        fade.elapsed += time.delta_secs();
+        let remaining = fade.duration - fade.elapsed;
+        if remaining > 0.0 {
+            let factor = remaining / fade.duration;
+            transform.scale = Vec3::ONE * starting * factor;
+        } else {
+            commands.entity(entity).try_despawn();
+        }
+    }
+}
+
 // ===========================================================================
 // TEMPLATES
 // ===========================================================================
@@ -89,7 +128,7 @@ fn explosion_template(commands: &mut Commands, entity: Option<Entity>) -> Entity
         Name::new("Explosion"),
         ExplosionMarker,
         Visibility::Inherited,
-        DelayedDespawn::after(0.4),
+        ScaleFadeVfx::new(0.4),
     ));
 
     entity
@@ -160,6 +199,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
                 bevy_diesel::bevy_gauge::attributes! {
                     "ProjectileLife" => 1.0,
                 },
+                MassPropertiesBundle::from_shape(&Collider::sphere(0.5), 2.0),
             ))
             .init_state_machine(flying);
     });
@@ -211,7 +251,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
 
     commands.entity(entity).with_children(|parent| {
         let repeating = parent
-            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(5)))
+            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(60)))
             .id();
 
         let spawn_wave = parent
@@ -223,7 +263,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
                     SpawnConfig::at_root("explosive_projectile").with_gatherer(
                         AvianGatherer::Circle {
                             radius: 4.0,
-                            count: NumberType::Fixed(3),
+                            count: NumberType::Fixed(30),
                         },
                     ),
                 ),
@@ -240,7 +280,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
         parent.spawn_transition::<OnRepeat>(repeating, spawn_wave);
         parent
             .spawn_transition_always(spawn_wave, repeating)
-            .with_delay(Duration::from_millis(600));
+            .with_delay(Duration::from_millis(50));
         parent.spawn_transition::<OnComplete>(repeating, done);
 
         let commands = parent.commands_mut();
@@ -411,7 +451,7 @@ fn update_cursor_target(
 fn invoke_abilities(
     mouse: Res<ButtonInput<MouseButton>>,
     q_player: Query<(&PlayerAbilities, &InvokerTarget)>,
-    mut commands: Commands,
+    mut writer: MessageWriter<StartInvoke>,
 ) {
     let Ok((abilities, invoker_target)) = q_player.single() else {
         return;
@@ -420,12 +460,12 @@ fn invoke_abilities(
     let target = Target::position(invoker_target.position);
 
     if mouse.just_pressed(MouseButton::Left) {
-        commands.trigger(StartInvoke::new(abilities.fireball, vec![target]));
+        writer.write(StartInvoke::new(abilities.fireball, vec![target]));
         info!("Fireball → {:.1}", invoker_target.position);
     }
 
     if mouse.just_pressed(MouseButton::Right) {
-        commands.trigger(StartInvoke::new(abilities.firestorm, vec![target]));
+        writer.write(StartInvoke::new(abilities.firestorm, vec![target]));
         info!("Firestorm → {:.1}", invoker_target.position);
     }
 }
@@ -516,7 +556,7 @@ fn main() {
         .add_systems(Startup, (setup, setup_assets, register_templates))
         .add_systems(
             Update,
-            (update_cursor_target, invoke_abilities, attach_visuals),
+            (update_cursor_target, invoke_abilities, attach_visuals, scale_fade_system),
         )
         .run();
 }

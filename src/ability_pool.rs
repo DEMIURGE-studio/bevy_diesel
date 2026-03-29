@@ -75,59 +75,57 @@ impl Plugin for DieselAbilityPoolPlugin {
 // ================= PAE Integration Observers =================
 
 /// On enter, register all Ability children with the PAE's target.
+/// Now reads FrameTransitionLog instead of using On<EnterState>.
 pub fn emit_register_on_active(
-    enter_state: On<EnterState>,
+    frame_log: Res<FrameTransitionLog>,
     q_children: Query<&Children>,
     q_ability: Query<Entity, With<Ability>>,
     q_effect_target: Query<&EffectTarget>,
     mut commands: Commands,
 ) {
-    let effect_entity = enter_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        warn!(
-            "RegisterAbility: EffectTarget missing on effect {}",
-            effect_entity
-        );
-        return;
-    };
-    let target_entity = effect_target.0;
+    for (machine, _state) in frame_log.all_entered() {
+        let effect_entity = machine;
+        let Ok(effect_target) = q_effect_target.get(effect_entity) else {
+            continue;
+        };
+        let target_entity = effect_target.0;
 
-    let mut abilities = Vec::new();
-    collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
-    for ability_entity in abilities {
-        commands.trigger(RegisterAbility {
-            target: target_entity,
-            ability_entity,
-            source_entity: effect_entity,
-        });
+        let mut abilities = Vec::new();
+        collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
+        for ability_entity in abilities {
+            commands.trigger(RegisterAbility {
+                target: target_entity,
+                ability_entity,
+                source_entity: effect_entity,
+            });
+        }
     }
 }
 
 /// On exit, unregister all Ability children from the PAE's target.
+/// Now reads FrameTransitionLog instead of using On<ExitState>.
 pub fn emit_unregister_on_inactive(
-    exit_state: On<ExitState>,
+    frame_log: Res<FrameTransitionLog>,
     q_children: Query<&Children>,
     q_ability: Query<Entity, With<Ability>>,
     q_effect_target: Query<&EffectTarget>,
     mut commands: Commands,
 ) {
-    let effect_entity = exit_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        warn!(
-            "UnregisterAbility: EffectTarget missing on effect {}",
-            effect_entity
-        );
-        return;
-    };
-    let target_entity = effect_target.0;
+    for (machine, _state) in frame_log.all_exited() {
+        let effect_entity = machine;
+        let Ok(effect_target) = q_effect_target.get(effect_entity) else {
+            continue;
+        };
+        let target_entity = effect_target.0;
 
-    let mut abilities = Vec::new();
-    collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
-    for ability_entity in abilities {
-        commands.trigger(UnregisterAbility {
-            target: target_entity,
-            ability_entity,
-        });
+        let mut abilities = Vec::new();
+        collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
+        for ability_entity in abilities {
+            commands.trigger(UnregisterAbility {
+                target: target_entity,
+                ability_entity,
+            });
+        }
     }
 }
 

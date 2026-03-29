@@ -116,6 +116,12 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // State machine core
         app.add_plugins(bevy_gearbox::GearboxPlugin);
 
+        // Diesel effect pipeline ordering
+        app.configure_sets(Update, (
+            crate::DieselSet::Propagation.after(bevy_gearbox::GearboxSet),
+            crate::DieselSet::Effects.after(crate::DieselSet::Propagation),
+        ));
+
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)
         app.add_plugins(bevy_gauge::plugin::AttributesPlugin);
         app.add_plugins(crate::gauge::pae::DieselPaePlugin);
@@ -123,25 +129,51 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // Template registry
         app.init_resource::<crate::spawn::TemplateRegistry>();
 
-        // Repeater (hardcoded to OnRepeat<B::Pos>)
-        app.add_observer(repeater::repeater_observer::<OnRepeat<B::Pos>>);
-        app.add_observer(repeater::reset_repeater);
+        // Repeater (reads FrameTransitionLog instead of observers)
+        app.add_systems(
+            Update,
+            repeater::repeater_system::<OnRepeat<B::Pos>>.after(bevy_gearbox::GearboxSet),
+        );
         app.register_type::<repeater::Repeater>();
 
         // Despawn
-        app.add_observer(crate::despawn::queue_despawn_observer::<B::Pos>);
+        app.add_systems(Update, crate::despawn::queue_despawn_system::<B::Pos>.in_set(crate::DieselSet::Effects));
         app.add_systems(PostUpdate, crate::despawn::despawn_queue_system);
         app.register_state_component::<crate::despawn::DelayedDespawn>();
 
-        // Register transition events
+        // Register transition messages + side effects
         app.register_transition::<StartInvoke<B::Pos>>();
+        app.register_side_effect::<StartInvoke<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<StopInvoke<B::Pos>>();
+        app.register_side_effect::<StopInvoke<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnRepeat<B::Pos>>();
+        app.register_side_effect::<OnRepeat<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<CollidedEntity<B::Pos>>();
+        app.register_side_effect::<CollidedEntity<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<CollidedPosition<B::Pos>>();
+        app.register_side_effect::<CollidedPosition<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnOrigin<B::Pos>>();
+        app.register_side_effect::<OnSpawnOrigin<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnTarget<B::Pos>>();
+        app.register_side_effect::<OnSpawnTarget<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnInvoker<B::Pos>>();
+        app.register_side_effect::<OnSpawnInvoker<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
+        app.register_transition::<repeater::OnComplete>();
+        // Register GoOff message types
+        app.add_message::<crate::effect::GoOffOrigin<B::Pos>>();
+        app.add_message::<crate::effect::GoOff<B::Pos>>();
+
+        // PAE transition messages
+        app.register_transition::<crate::gauge::pae::state_machine::PAETryApply>();
+        app.register_transition::<crate::gauge::pae::state_machine::PAESuspend>();
+        app.register_transition::<crate::gauge::pae::state_machine::PAEUnapplyApproved>();
+
+        // Invocation
+        app.register_transition::<crate::invoke::InvocationComplete>();
+        app.add_systems(
+            Update,
+            crate::invoke::check_should_reinvoke_ability.after(bevy_gearbox::GearboxSet),
+        );
 
         // Ability pool (RegisterAbility / UnregisterAbility observers)
         app.add_plugins(crate::ability_pool::DieselAbilityPoolPlugin);

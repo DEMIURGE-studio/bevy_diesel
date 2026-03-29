@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
-use bevy_gearbox::transitions::TransitionEvent;
 
 use crate::invoker::InvokedBy;
 
@@ -30,10 +29,14 @@ impl Repeater {
 // ---------------------------------------------------------------------------
 
 /// Fired when a repeater's counter reaches zero.
-#[derive(SimpleTransition, EntityEvent, Debug, Clone, Reflect)]
+#[derive(Message, Debug, Clone, Reflect)]
 pub struct OnComplete {
-    #[event_target]
     pub entity: Entity,
+}
+
+impl GearboxMessage for OnComplete {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl OnComplete {
@@ -43,46 +46,42 @@ impl OnComplete {
 }
 
 // ---------------------------------------------------------------------------
-// Repeater observer
+// Repeatable trait + repeater system
 // ---------------------------------------------------------------------------
 
 /// Trait for events that the repeater can emit on each tick.
-pub trait Repeatable: EntityEvent + TransitionEvent + Send + Sync + 'static
-where
-    for<'a> <Self as Event>::Trigger<'a>: Default,
-{
+pub trait Repeatable: GearboxMessage + Send + Sync + 'static {
     fn repeat_tick(entity: Entity) -> Self;
 }
 
-pub fn repeater_observer<E: Repeatable>(
-    enter_state: On<EnterState>,
+/// System that reads FrameTransitionLog and fires repeater ticks.
+/// Replaces the old `On<EnterState>` observer.
+pub fn repeater_system<E: Repeatable>(
+    frame_log: Res<FrameTransitionLog>,
     mut q_repeater: Query<&mut Repeater>,
     q_substate_of: Query<&SubstateOf>,
-    mut commands: Commands,
-) where
-    for<'a> <E as Event>::Trigger<'a>: Default,
-{
-    let state = enter_state.target;
-    let Ok(mut repeater) = q_repeater.get_mut(state) else {
-        return;
-    };
-    let root = q_substate_of.root_ancestor(state);
+    mut writer_e: MessageWriter<E>,
+    mut writer_complete: MessageWriter<OnComplete>,
+) {
+    for (_machine, state) in frame_log.all_entered() {
+        let Ok(mut repeater) = q_repeater.get_mut(state) else {
+            continue;
+        };
+        let root = q_substate_of.root_ancestor(state);
 
-    if repeater.remaining > 0 {
-        commands.trigger(E::repeat_tick(root));
-        repeater.remaining -= 1;
-    } else {
-        commands.trigger(OnComplete::new(root));
+        if repeater.remaining > 0 {
+            writer_e.write(E::repeat_tick(root));
+            repeater.remaining -= 1;
+        } else {
+            writer_complete.write(OnComplete::new(root));
+        }
     }
 }
 
-pub fn reset_repeater(reset: On<Reset>, mut q_repeater: Query<&mut Repeater>) {
-    let state = reset.target;
-    let Ok(mut repeater) = q_repeater.get_mut(state) else {
-        return;
-    };
-    repeater.remaining = repeater.initial;
-}
+// TODO: The original reset_repeater was an On<Reset> observer that only fired
+// when a ResetEdge explicitly reset the subtree. For now, repeater reset is
+// disabled until we have a proper Reset mechanism in the schedule version.
+// The repeater counter persists across the machine's lifetime.
 
 // ---------------------------------------------------------------------------
 // template_repeater builder
@@ -92,10 +91,7 @@ pub fn template_repeater<E: Repeatable>(
     remaining: u32,
     delay_seconds: f32,
     on_repeat: impl FnOnce(&mut EntityCommands),
-) -> impl FnOnce(&mut EntityCommands)
-where
-    for<'a> <E as Event>::Trigger<'a>: Default,
-{
+) -> impl FnOnce(&mut EntityCommands) {
     move |parent_state: &mut EntityCommands| {
         let parent_entity = parent_state.id();
         parent_state.with_children(|parent| {
@@ -122,7 +118,7 @@ where
                 Name::new("OnRepeat"),
                 Source(repeat),
                 Target(apply),
-                EventEdge::<E>::default(),
+                MessageEdge::<E>::default(),
             ));
 
             parent.spawn((

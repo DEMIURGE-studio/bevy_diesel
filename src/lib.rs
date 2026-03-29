@@ -21,7 +21,25 @@ pub use bevy_gauge;
 pub use bevy_gearbox;
 pub use inventory;
 
+/// System sets for ordering diesel's effect pipeline in [`Update`].
+///
+/// ```text
+/// GearboxSet          ← state machine resolution + side effect production
+///     ↓
+/// DieselPropagation   ← propagate_system: reads GoOffOrigin, walks tree, writes GoOff
+///     ↓
+/// DieselEffects       ← leaf systems: print, spawn, despawn, modifiers, etc.
+/// ```
+#[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DieselSet {
+    /// Propagation: reads [`GoOffOrigin`], writes [`GoOff`] for every descendant.
+    Propagation,
+    /// Leaf effect systems that consume [`GoOff`].
+    Effects,
+}
+
 pub mod prelude {
+    pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
     pub use crate::effect::{GoOff, SubEffectOf, SubEffects};
@@ -41,14 +59,14 @@ pub mod prelude {
     pub use crate::go_off;
     pub use crate::gearbox::repeater::{OnComplete, Repeater, template_repeater};
     pub use crate::gearbox::templates::apply_sub_effect;
-    pub use bevy_gearbox::{SimpleTransition, RegistrationAppExt};
+    pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
-        AlwaysEdge, Delay, EnterState, EventEdge, ExitState,
+        AlwaysEdge, Delay, MessageEdge,
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
         SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
-        GuardProvider,
+        GuardProvider, WriteMessageExt,
+        GearboxSet, FrameTransitionLog,
     };
-    pub use bevy_gearbox::transitions::{NoEvent, TransitionEvent, EventValidator};
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
         RegisterPropagationTarget, PropagationRegistrar,
