@@ -1,0 +1,7 @@
+# Rust build artifacts
+target
+crates/**/target
+benches/**/target
+tools/**/target
+**/*.rs.bk
+rustc-ice-*.txt

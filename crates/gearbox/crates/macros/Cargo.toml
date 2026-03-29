@@ -1,0 +1,20 @@
+[package]
+name = "bevy_gearbox_macros"
+version = "0.4.0"
+edition = "2021"
+description = "Macros for bevy_gearbox"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_gearbox_macros"
+homepage = "https://github.com/DEMIURGE-studio/bevy_gearbox_macros"
+keywords = ["bevy", "macros", "state-machine", "gamedev"]
+categories = ["game-development", "development-tools::procedural-macro-helpers"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }

@@ -1,0 +1,29 @@
+[package]
+name = "bevy_gearbox_editor"
+version = "0.5.1"
+edition = "2021"
+description = "State machine system for the bevy game engine"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_gearbox_editor"
+homepage = "https://github.com/DEMIURGE-studio/bevy_gearbox_editor"
+keywords = ["bevy", "state-machine", "gamedev", "ecs"]
+categories = ["game-development", "game-engines"]
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_asset",
+    "bevy_camera",
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_shader",
+    "bevy_window",
+    "bevy_winit",
+] }
+bevy_egui = "0.39"
+bevy_gearbox_protocol = { version = "0.5", path = "../protocol", features = ["server"] }
+hex = "0.4.3"
+rfd = "0.15.4"
+ron = "0.11.0"
+serde = "1.0.228"
+serde_json = "1.0.145"
+sha2 = "0.10.9"
