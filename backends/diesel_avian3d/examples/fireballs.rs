@@ -160,6 +160,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
                 bevy_diesel::bevy_gauge::attributes! {
                     "ProjectileLife" => 1.0,
                 },
+                MassPropertiesBundle::from_shape(&Collider::sphere(0.5), 2.0),
             ))
             .init_state_machine(flying);
     });
@@ -211,7 +212,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
 
     commands.entity(entity).with_children(|parent| {
         let repeating = parent
-            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(5)))
+            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(60)))
             .id();
 
         let spawn_wave = parent
@@ -223,7 +224,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
                     SpawnConfig::at_root("explosive_projectile").with_gatherer(
                         AvianGatherer::Circle {
                             radius: 4.0,
-                            count: NumberType::Fixed(3),
+                            count: NumberType::Fixed(30),
                         },
                     ),
                 ),
@@ -240,7 +241,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
         parent.spawn_transition::<OnRepeat>(repeating, spawn_wave);
         parent
             .spawn_transition_always(spawn_wave, repeating)
-            .with_delay(Duration::from_millis(600));
+            .with_delay(Duration::from_millis(50));
         parent.spawn_transition::<OnComplete>(repeating, done);
 
         let commands = parent.commands_mut();
