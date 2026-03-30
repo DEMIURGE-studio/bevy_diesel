@@ -146,7 +146,7 @@ macro_rules! spawn_event {
         #[derive(Message, Clone, Debug)]
         pub struct $Name<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static> {
             pub entity: Entity,
-            pub targets: Vec<Target<P>>,
+            pub target: Target<P>,
         }
 
         impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>
@@ -159,30 +159,8 @@ macro_rules! spawn_event {
         }
 
         impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static> $Name<P> {
-            pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-                Self { entity, targets }
-            }
-        }
-
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>
-            From<Vec<Target<P>>> for $Name<P>
-        {
-            fn from(targets: Vec<Target<P>>) -> Self {
-                Self {
-                    entity: Entity::PLACEHOLDER,
-                    targets,
-                }
-            }
-        }
-
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>
-            crate::gearbox::repeater::Repeatable for $Name<P>
-        {
-            fn repeat_tick(entity: Entity) -> Self {
-                Self {
-                    entity,
-                    targets: Vec::new(),
-                }
+            pub fn new(entity: Entity, target: Target<P>) -> Self {
+                Self { entity, target }
             }
         }
 
@@ -192,7 +170,7 @@ macro_rules! spawn_event {
             fn produce(matched: &bevy_gearbox::Matched<$Name<P>>) -> Option<Self> {
                 Some(GoOffOrigin::new(
                     matched.target,
-                    matched.message.targets.clone(),
+                    matched.message.target,
                 ))
             }
         }
@@ -221,11 +199,9 @@ pub fn spawn_system<B: SpatialBackend>(
     mut spawn_origin_writer: MessageWriter<OnSpawnOrigin<B::Pos>>,
     mut spawn_invoker_writer: MessageWriter<OnSpawnInvoker<B::Pos>>,
 ) {
-    let mut go_off_count = 0u32;
     for go_off in reader.read() {
-        go_off_count += 1;
         let effect_entity = go_off.entity;
-        let in_targets = go_off.targets.clone();
+        let passed = go_off.target;
 
         let invoker = q_invoker.root_ancestor(effect_entity);
         let invoker_target: Target<B::Pos> = q_invoker_target
@@ -238,25 +214,15 @@ pub fn spawn_system<B: SpatialBackend>(
         };
         let root = q_child_of.root_ancestor(effect_entity);
 
-        let passed_targets: &[Target<B::Pos>] = if in_targets.is_empty() {
-            &[Target::default()]
-        } else {
-            &in_targets
-        };
-
-        let mut spawn_targets = Vec::new();
-        for passed_target in passed_targets.iter() {
-            let mut chunk = generate_targets::<B>(
-                &spawn_config.spawn_position_generator,
-                &mut ctx,
-                invoker,
-                invoker_target,
-                root,
-                B::Pos::default(),
-                *passed_target,
-            );
-            spawn_targets.append(&mut chunk);
-        }
+        let mut spawn_targets = generate_targets::<B>(
+            &spawn_config.spawn_position_generator,
+            &mut ctx,
+            invoker,
+            invoker_target,
+            root,
+            B::Pos::default(),
+            passed,
+        );
 
         if spawn_targets.is_empty() {
             continue;
@@ -266,7 +232,7 @@ pub fn spawn_system<B: SpatialBackend>(
             let targets = generate_targets_with_spawn_positions::<B>(
                 target_generator,
                 &spawn_targets,
-                passed_targets,
+                &[passed],
                 invoker,
                 invoker_target,
                 root,
@@ -285,7 +251,7 @@ pub fn spawn_system<B: SpatialBackend>(
                 TargetType::Invoker => Some(invoker),
                 TargetType::InvokerTarget => invoker_target.entity,
                 TargetType::Root => Some(root),
-                TargetType::Passed => passed_targets.first().and_then(|t| t.entity),
+                TargetType::Passed => passed.entity,
                 TargetType::Spawn => None,
                 TargetType::Position(_) => None,
             };
@@ -317,7 +283,7 @@ pub fn spawn_system<B: SpatialBackend>(
                         .entity(spawned_entity)
                         .insert((target_target, ChildOf(parent)));
                     spawn_target_writer
-                        .write(OnSpawnTarget::new(spawned_entity, vec![target_target]));
+                        .write(OnSpawnTarget::new(spawned_entity, target_target));
                 }
                 (Some(targets), None) => {
                     let target_target = targets
@@ -326,7 +292,7 @@ pub fn spawn_system<B: SpatialBackend>(
                         .unwrap_or(*spawn_target);
                     commands.entity(spawned_entity).insert(target_target);
                     spawn_target_writer
-                        .write(OnSpawnTarget::new(spawned_entity, vec![target_target]));
+                        .write(OnSpawnTarget::new(spawned_entity, target_target));
                 }
                 (None, Some(parent)) => {
                     commands.entity(spawned_entity).insert(ChildOf(parent));
@@ -336,13 +302,13 @@ pub fn spawn_system<B: SpatialBackend>(
 
             spawn_origin_writer.write(OnSpawnOrigin::new(
                 spawned_entity,
-                vec![Target::entity(spawned_entity, spawn_target.position)],
+                Target::entity(spawned_entity, spawn_target.position),
             ));
 
             let invoker_position = B::position_of(&ctx, invoker).unwrap_or_default();
             spawn_invoker_writer.write(OnSpawnInvoker::new(
                 spawned_entity,
-                vec![Target::entity(invoker, invoker_position)],
+                Target::entity(invoker, invoker_position),
             ));
         }
     }

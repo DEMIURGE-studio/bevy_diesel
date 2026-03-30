@@ -52,8 +52,8 @@ pub fn generate_targets<B: SpatialBackend>(
 }
 
 /// Reads [`GoOffOrigin`] messages, walks the [`SubEffects`] tree for each one,
-/// resolves targets at each level, and writes a flat [`GoOff`] for every
-/// descendant effect entity. No recursion — single pass using a stack.
+/// resolves targets at each level, and writes a [`GoOff`] for every
+/// descendant effect entity × target. No recursion — single pass using a stack.
 pub fn propagate_system<B: SpatialBackend>(
     mut reader: MessageReader<GoOffOrigin<B::Pos>>,
     mut ctx: B::Context<'_, '_>,
@@ -64,11 +64,9 @@ pub fn propagate_system<B: SpatialBackend>(
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut writer: MessageWriter<GoOff<B::Pos>>,
 ) {
-    let mut origin_count = 0u32;
     for origin in reader.read() {
-        origin_count += 1;
         let root_entity = origin.entity;
-        let root_targets = origin.targets.clone();
+        let root_target = origin.target;
 
         let invoker = resolve_invoker(&q_invoker, root_entity);
         let root = resolve_root(&q_child_of, root_entity);
@@ -79,10 +77,10 @@ pub fn propagate_system<B: SpatialBackend>(
             .unwrap_or_default();
 
         // Fire GoOff on the root entity itself
-        writer.write(GoOff::new(root_entity, root_targets.clone()));
+        writer.write(GoOff::new(root_entity, root_target));
 
         // Walk the tree: (entity, targets_for_this_entity)
-        let mut stack: Vec<(Entity, Vec<Target<B::Pos>>)> = vec![(root_entity, root_targets)];
+        let mut stack: Vec<(Entity, Vec<Target<B::Pos>>)> = vec![(root_entity, vec![root_target])];
 
         while let Some((parent, in_targets)) = stack.pop() {
             let Ok(subs) = q_sub_effects.get(parent) else {
@@ -117,7 +115,10 @@ pub fn propagate_system<B: SpatialBackend>(
                     in_targets.clone()
                 };
 
-                writer.write(GoOff::new(child, out_targets.clone()));
+                // Write one GoOff per target (batch messages instead of Vec)
+                for &target in &out_targets {
+                    writer.write(GoOff::new(child, target));
+                }
                 stack.push((child, out_targets));
             }
         }

@@ -1,13 +1,26 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
 
+use crate::events::{OnRepeat, PosBound};
 use crate::invoker::InvokedBy;
+use crate::target::Target as DieselTarget;
 
 // ---------------------------------------------------------------------------
 // Repeater component
 // ---------------------------------------------------------------------------
 
-/// Counter-driven repetition. Place on a state entity.
+/// Counter-driven repetition. Place on a superstate whose substates should
+/// be re-entered on each cycle.
+///
+/// Internally the repeater creates an Idle → Apply cycle driven by
+/// [`OnRepeat`]. Each cycle, the repeater system writes `OnRepeat` which
+/// fires the `MessageEdge`, producing `GoOffOrigin` via the normal
+/// `SideEffect` pipeline. When the counter reaches 0, [`OnComplete`] is
+/// written instead so the user can transition away.
+///
+/// The counter resets when the Repeater gains `Active` (fresh entry from parent).
 #[derive(Component, Clone, Debug, Reflect, Default)]
 #[reflect(Component, Default)]
 pub struct Repeater {
@@ -25,10 +38,10 @@ impl Repeater {
 }
 
 // ---------------------------------------------------------------------------
-// OnComplete event
+// OnComplete message
 // ---------------------------------------------------------------------------
 
-/// Fired when a repeater's counter reaches zero.
+/// Written when a repeater's counter reaches zero.
 #[derive(Message, Debug, Clone, Reflect)]
 pub struct OnComplete {
     pub entity: Entity,
@@ -36,7 +49,9 @@ pub struct OnComplete {
 
 impl GearboxMessage for OnComplete {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn machine(&self) -> Entity {
+        self.entity
+    }
 }
 
 impl OnComplete {
@@ -46,87 +61,41 @@ impl OnComplete {
 }
 
 // ---------------------------------------------------------------------------
-// Repeatable trait + repeater system
+// Repeater system
 // ---------------------------------------------------------------------------
 
-/// Trait for events that the repeater can emit on each tick.
-pub trait Repeatable: GearboxMessage + Send + Sync + 'static {
-    fn repeat_tick(entity: Entity) -> Self;
-}
-
-/// Resets repeater counters when a state with a Repeater is re-entered.
-/// Runs before the tick system so a fresh entry starts from the initial count.
-pub fn reset_repeater_on_entry(
-    mut q_newly_active: Query<&mut Repeater, Added<Active>>,
-) {
-    for mut repeater in q_newly_active.iter_mut() {
-        repeater.remaining = repeater.initial;
-    }
-}
-
-/// Fires repeater ticks when states with Repeater are entered.
-pub fn repeater_system<E: Repeatable>(
-    mut q_newly_active: Query<(Entity, &Active, &mut Repeater), Added<Active>>,
-    mut writer_e: MessageWriter<E>,
+/// Repeater lifecycle system. Uses `Changed<Active>` with `Ref` to
+/// distinguish initial entry from re-entry via the Apply→Repeater bounce:
+///
+/// - `is_added()` (initial entry): reset counter, write first [`OnRepeat`]
+/// - `!is_added()` (re-entry): decrement, write [`OnRepeat`] if remaining > 0,
+///   else [`OnComplete`]
+pub fn repeater_tick<P: PosBound>(
+    q_changed: Query<(Entity, &Active, Ref<Active>), (Changed<Active>, With<Repeater>)>,
+    q_substate_of: Query<&SubstateOf>,
+    mut q_repeater: Query<&mut Repeater>,
+    mut writer_repeat: MessageWriter<OnRepeat<P>>,
     mut writer_complete: MessageWriter<OnComplete>,
 ) {
-    for (_state, active, mut repeater) in q_newly_active.iter_mut() {
-        if repeater.remaining > 0 {
-            writer_e.write(E::repeat_tick(active.machine));
+    for (entity, active, active_ref) in &q_changed {
+        let Ok(mut repeater) = q_repeater.get_mut(entity) else {
+            continue;
+        };
+
+        let root = q_substate_of.root_ancestor(entity);
+        let target = DieselTarget::entity(root, P::default());
+
+        if active_ref.is_added() {
+            // Initial entry — reset counter, decrement, fire first tick
+            repeater.remaining = repeater.initial - 1;
+            writer_repeat.write(OnRepeat::new(active.machine, target));
+        } else if repeater.remaining > 0 {
+            // Re-entry via Apply→Repeater bounce — decrement and fire
             repeater.remaining -= 1;
+            writer_repeat.write(OnRepeat::new(active.machine, target));
         } else {
+            // Exhausted
             writer_complete.write(OnComplete::new(active.machine));
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// template_repeater builder
-// ---------------------------------------------------------------------------
-
-pub fn template_repeater<E: Repeatable>(
-    remaining: u32,
-    delay_seconds: f32,
-    on_repeat: impl FnOnce(&mut EntityCommands),
-) -> impl FnOnce(&mut EntityCommands) {
-    move |parent_state: &mut EntityCommands| {
-        let parent_entity = parent_state.id();
-        parent_state.with_children(|parent| {
-            let repeat = parent
-                .spawn((
-                    Name::new("Repeat"),
-                    SubstateOf(parent_entity),
-                    Repeater::new(remaining),
-                ))
-                .id();
-
-            let apply = parent
-                .spawn((
-                    Name::new("RepeatApply"),
-                    SubstateOf(parent_entity),
-                    InvokedBy(parent_entity),
-                ))
-                .id();
-
-            let mut apply_ec = parent.commands_mut().entity(apply);
-            on_repeat(&mut apply_ec);
-
-            parent.spawn((
-                Name::new("OnRepeat"),
-                Source(repeat),
-                Target(apply),
-                MessageEdge::<E>::default(),
-            ));
-
-            parent.spawn((
-                Name::new("RepeatDelay"),
-                Source(apply),
-                Target(repeat),
-                AlwaysEdge,
-                Delay {
-                    duration: std::time::Duration::from_secs_f32(delay_seconds),
-                },
-            ));
-        });
     }
 }

@@ -32,10 +32,8 @@ pub fn queue_despawn_system<P: Clone + Copy + Send + Sync + Default + Debug + 's
             continue;
         };
 
-        for target in go_off.targets.iter() {
-            if let Some(target_entity) = target.entity {
-                commands.entity(target_entity).insert(DelayedDespawn::now());
-            }
+        if let Some(target_entity) = go_off.target.entity {
+            commands.entity(target_entity).insert(DelayedDespawn::now());
         }
     }
 }

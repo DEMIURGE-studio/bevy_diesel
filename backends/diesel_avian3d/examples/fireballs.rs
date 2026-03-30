@@ -79,7 +79,11 @@ struct ScaleFadeVfx {
 
 impl ScaleFadeVfx {
     fn new(duration: f32) -> Self {
-        Self { duration, elapsed: 0.0, starting_scale: None }
+        Self {
+            duration,
+            elapsed: 0.0,
+            starting_scale: None,
+        }
     }
 }
 
@@ -92,7 +96,9 @@ fn scale_fade_system(
         if fade.starting_scale.is_none() {
             fade.starting_scale = Some(transform.scale.x);
         }
-        let Some(starting) = fade.starting_scale else { continue };
+        let Some(starting) = fade.starting_scale else {
+            continue;
+        };
 
         fade.elapsed += time.delta_secs();
         let remaining = fade.duration - fade.elapsed;
@@ -250,17 +256,22 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let repeating = parent
-            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(60)))
+        // Repeater: 3 volleys, 500ms between each
+        let repeater = parent
+            .spawn_substate(entity, (Name::new("Repeater"), Repeater::new(3)))
+            .id();
+
+        let idle = parent
+            .spawn_substate(repeater, Name::new("Idle"))
             .id();
 
         let spawn_wave = parent
             .spawn_substate(
-                entity,
+                repeater,
                 (
                     Name::new("SpawnWave"),
                     InvokedBy(entity),
-                    SpawnConfig::at_root("explosive_projectile").with_gatherer(
+                    SpawnConfig::root("explosive_projectile").with_gatherer(
                         AvianGatherer::Circle {
                             radius: 4.0,
                             count: NumberType::Fixed(30),
@@ -270,6 +281,14 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
             )
             .id();
 
+        // Idle → SpawnWave (driven by OnRepeat from the repeater system)
+        parent.spawn_transition::<OnRepeat>(idle, spawn_wave);
+        // SpawnWave → Repeater (self-transition, triggers Changed<Active> for next cycle)
+        parent
+            .spawn_transition_always(spawn_wave, repeater)
+            .with_delay(Duration::from_millis(500));
+
+        // When repeater exhausts, OnComplete transitions to Done
         let done = parent
             .spawn_substate(
                 entity,
@@ -277,13 +296,12 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
             )
             .id();
 
-        parent.spawn_transition::<OnRepeat>(repeating, spawn_wave);
-        parent
-            .spawn_transition_always(spawn_wave, repeating)
-            .with_delay(Duration::from_millis(50));
-        parent.spawn_transition::<OnComplete>(repeating, done);
+        parent.spawn_transition::<OnComplete>(repeater, done);
 
         let commands = parent.commands_mut();
+        commands
+            .entity(repeater)
+            .insert(InitialState(idle));
         commands
             .entity(entity)
             .insert((
@@ -291,7 +309,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
                 FirestormZoneMarker,
                 Visibility::Inherited,
             ))
-            .init_state_machine(repeating);
+            .init_state_machine(repeater);
     });
 
     entity
@@ -460,12 +478,12 @@ fn invoke_abilities(
     let target = Target::position(invoker_target.position);
 
     if mouse.just_pressed(MouseButton::Left) {
-        writer.write(StartInvoke::new(abilities.fireball, vec![target]));
+        writer.write(StartInvoke::new(abilities.fireball, target));
         info!("Fireball → {:.1}", invoker_target.position);
     }
 
     if mouse.just_pressed(MouseButton::Right) {
-        writer.write(StartInvoke::new(abilities.firestorm, vec![target]));
+        writer.write(StartInvoke::new(abilities.firestorm, target));
         info!("Firestorm → {:.1}", invoker_target.position);
     }
 }
@@ -556,7 +574,12 @@ fn main() {
         .add_systems(Startup, (setup, setup_assets, register_templates))
         .add_systems(
             Update,
-            (update_cursor_target, invoke_abilities, attach_visuals, scale_fade_system),
+            (
+                update_cursor_target,
+                invoke_abilities,
+                attach_visuals,
+                scale_fade_system,
+            ),
         )
         .run();
 }

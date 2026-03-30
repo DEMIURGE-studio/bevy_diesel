@@ -3,7 +3,7 @@ pub mod guards {
     pub use crate::components::{Guard, GuardProvider, Guards};
 }
 
-/// Compatibility re-exports for `bevy_gearbox::transitions::*`.
+/// Re-exports for `bevy_gearbox::transitions::*`.
 pub mod transitions {
     pub use crate::components::{
         AlwaysEdge, Delay, EdgeKind, Guards, Source, Target, Transitions,
@@ -13,26 +13,12 @@ pub mod transitions {
         AcceptAll, GearboxMessage, MessageEdge, MessageValidator,
     };
     pub use crate::registration::DeferEvent;
-
-    /// Shim: `TransitionEvent` is now [`GearboxMessage`](crate::messages::GearboxMessage).
-    /// This alias allows old code to compile while migrating.
-    pub use crate::messages::GearboxMessage as TransitionEvent;
-
-    /// Shim: `EventEdge<E>` is now [`MessageEdge<M>`](crate::messages::MessageEdge).
-    pub use crate::messages::MessageEdge as EventEdge;
-
-    /// Shim: `EventValidator` is now [`MessageValidator`](crate::messages::MessageValidator).
-    pub use crate::messages::MessageValidator as EventValidator;
-
-    /// Placeholder for code that referenced `NoEvent` (phase sub-events are
-    /// gone in the schedule version).
-    #[derive(Clone, Default)]
-    pub struct NoEvent;
 }
 
-/// Compatibility prelude matching core's `prelude` module.
+/// Prelude module.
 pub mod prelude {
     pub use crate::components::{
+        Active,
         SubstateOf, Substates, StateMachine, InitialState,
         Source, Target, Transitions, AlwaysEdge, EdgeKind,
         Guards, Delay,
@@ -58,7 +44,6 @@ pub mod prelude {
         TransitionMessage,
         EnterState, ExitState,
     };
-    pub use crate::components::Active;
     pub use crate::registration::RegistrationAppExt;
     pub use crate::parameters::{
         FloatParam, IntParam, BoolParam,
@@ -67,18 +52,4 @@ pub mod prelude {
         sync_float_param, sync_int_param, sync_bool_param,
         apply_float_param_guards, apply_int_param_guards, apply_bool_param_guards,
     };
-    pub use crate::NoEvent;
-
-    // Compat aliases
-    pub use crate::messages::MessageEdge as EventEdge;
-    pub use crate::messages::GearboxMessage as TransitionEvent;
-    pub use crate::messages::MessageValidator as EventValidator;
 }
-
-/// Compat: `SimpleTransition` doesn't exist as a derive in the schedule
-/// version. Re-export the trait alias so `use bevy_gearbox::SimpleTransition`
-/// resolves. Users should switch to `#[gearbox_message]` attribute macro.
-pub use crate::messages::GearboxMessage as SimpleTransition;
-
-/// Compat alias for the plugin.
-pub use crate::GearboxSchedulePlugin as GearboxPlugin;

@@ -14,12 +14,12 @@ use crate::target::Target;
 #[derive(Message, Clone)]
 pub struct GoOffOrigin<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -34,12 +34,12 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
 #[derive(Message, Clone)]
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 

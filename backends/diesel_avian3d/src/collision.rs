@@ -52,7 +52,7 @@ fn emit_entity_if(
     let collision_pos = q_position.get(ability).ok().map(|p| p.0)
         .or_else(|| q_position.get(target).ok().map(|p| p.0))
         .unwrap_or(Vec3::ZERO);
-    writer.write(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
+    writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
 }
 
 fn emit_position_if(
@@ -65,7 +65,7 @@ fn emit_position_if(
     if q_collides.get(ability).is_err() {
         return;
     }
-    writer.write(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
+    writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ fn emit_entity_filtered<F: CollisionFilter>(
         let collision_pos = q_position.get(ability).ok().map(|p| p.0)
             .or_else(|| q_position.get(target).ok().map(|p| p.0))
             .unwrap_or(Vec3::ZERO);
-        writer.write(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
+        writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
     }
 }
 
@@ -161,6 +161,6 @@ fn emit_position_filtered<F: CollisionFilter>(
     target: Entity,
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
-        writer.write(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
+        writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
     }
 }

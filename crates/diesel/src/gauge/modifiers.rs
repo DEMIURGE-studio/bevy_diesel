@@ -23,10 +23,8 @@ pub fn modifier_set_system<P: Clone + Copy + Send + Sync + Default + Debug + 'st
             continue;
         };
 
-        for target in go_off.targets.iter() {
-            if let Some(target_entity) = target.entity {
-                modifier_set.apply(target_entity, &mut attributes);
-            }
+        if let Some(target_entity) = go_off.target.entity {
+            modifier_set.apply(target_entity, &mut attributes);
         }
     }
 }

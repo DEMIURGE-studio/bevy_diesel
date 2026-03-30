@@ -129,15 +129,10 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // Template registry
         app.init_resource::<crate::spawn::TemplateRegistry>();
 
-        // Repeater (uses Added<Active> queries instead of observers)
+        // Repeater (Idle→Apply cycle driven by OnRepeat)
         app.add_systems(
             Update,
-            (
-                repeater::reset_repeater_on_entry,
-                repeater::repeater_system::<OnRepeat<B::Pos>>,
-            )
-                .chain()
-                .after(bevy_gearbox::GearboxSet),
+            repeater::repeater_tick::<B::Pos>.after(bevy_gearbox::GearboxSet),
         );
         app.register_type::<repeater::Repeater>();
 

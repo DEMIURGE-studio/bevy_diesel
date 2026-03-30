@@ -22,20 +22,18 @@ pub fn instant_set_system<P: Clone + Copy + Send + Sync + Default + Debug + 'sta
 
         let attacker = q_invoked_by.root_ancestor(effect_entity);
 
-        for target in go_off.targets.iter() {
-            let Some(defender) = target.entity else {
-                continue;
-            };
+        let Some(defender) = go_off.target.entity else {
+            continue;
+        };
 
-            let roles = [
-                ("attacker", attacker),
-                ("invoker", attacker),
-                ("defender", defender),
-                ("target", defender),
-                ("ability", effect_entity),
-            ];
+        let roles = [
+            ("attacker", attacker),
+            ("invoker", attacker),
+            ("defender", defender),
+            ("target", defender),
+            ("ability", effect_entity),
+        ];
 
-            attributes.apply_instant(instant, &roles, defender);
-        }
+        attributes.apply_instant(instant, &roles, defender);
     }
 }

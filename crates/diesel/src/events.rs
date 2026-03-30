@@ -8,7 +8,6 @@ use bevy::reflect::TypePath;
 use bevy_gearbox::{AcceptAll, GearboxMessage, Matched, SideEffect};
 
 use crate::effect::GoOffOrigin;
-use crate::gearbox::repeater::Repeatable;
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ impl<T: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'sta
 #[derive(Message, Clone, Debug)]
 pub struct OnRepeat<P: PosBound> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: PosBound> GearboxMessage for OnRepeat<P> {
@@ -36,26 +35,8 @@ impl<P: PosBound> GearboxMessage for OnRepeat<P> {
 }
 
 impl<P: PosBound> OnRepeat<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> Repeatable for OnRepeat<P> {
-    fn repeat_tick(entity: Entity) -> Self {
-        Self {
-            entity,
-            targets: Vec::new(),
-        }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for OnRepeat<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -67,7 +48,7 @@ impl<P: PosBound> From<Vec<Target<P>>> for OnRepeat<P> {
 #[derive(Message, Clone, Debug)]
 pub struct StartInvoke<P: PosBound> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: PosBound> GearboxMessage for StartInvoke<P> {
@@ -76,17 +57,8 @@ impl<P: PosBound> GearboxMessage for StartInvoke<P> {
 }
 
 impl<P: PosBound> StartInvoke<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -98,7 +70,7 @@ impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
 #[derive(Message, Clone, Debug)]
 pub struct StopInvoke<P: PosBound> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: PosBound> GearboxMessage for StopInvoke<P> {
@@ -107,17 +79,8 @@ impl<P: PosBound> GearboxMessage for StopInvoke<P> {
 }
 
 impl<P: PosBound> StopInvoke<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for StopInvoke<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -129,7 +92,7 @@ impl<P: PosBound> From<Vec<Target<P>>> for StopInvoke<P> {
 #[derive(Message, Clone, Debug)]
 pub struct CollidedEntity<P: PosBound> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: PosBound> GearboxMessage for CollidedEntity<P> {
@@ -138,17 +101,8 @@ impl<P: PosBound> GearboxMessage for CollidedEntity<P> {
 }
 
 impl<P: PosBound> CollidedEntity<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for CollidedEntity<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -160,7 +114,7 @@ impl<P: PosBound> From<Vec<Target<P>>> for CollidedEntity<P> {
 #[derive(Message, Clone, Debug)]
 pub struct CollidedPosition<P: PosBound> {
     pub entity: Entity,
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
 }
 
 impl<P: PosBound> GearboxMessage for CollidedPosition<P> {
@@ -169,29 +123,20 @@ impl<P: PosBound> GearboxMessage for CollidedPosition<P> {
 }
 
 impl<P: PosBound> CollidedPosition<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for CollidedPosition<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
 // ---------------------------------------------------------------------------
-// SideEffect impls: all diesel transition messages produce GoOff<P>
+// SideEffect impls: all diesel transition messages produce GoOffOrigin<P>
 // ---------------------------------------------------------------------------
 
 macro_rules! impl_go_off_side_effect {
     ($($Msg:ident),*) => {$(
         impl<P: PosBound> SideEffect<$Msg<P>> for GoOffOrigin<P> {
             fn produce(matched: &Matched<$Msg<P>>) -> Option<Self> {
-                Some(GoOffOrigin::new(matched.target, matched.message.targets.clone()))
+                Some(GoOffOrigin::new(matched.target, matched.message.target))
             }
         }
     )*};

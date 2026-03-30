@@ -284,9 +284,16 @@ pub(crate) fn resolve_transitions(
             commands.entity(state).remove::<Active>();
         }
 
-        // Insert Active on newly entered states (states in new active but not in old)
+        // Insert Active on newly entered states, or re-insert on states that
+        // stayed active but are the target of a transition (triggers Changed<Active>
+        // without triggering RemovedComponents<Active>).
         for &state in &machine.active {
-            if !old_active.contains(&state) {
+            if !old_active.contains(&state) || exited_all.contains(&state) {
+                // New or re-entered: insert (triggers Added<Active>)
+                commands.entity(state).insert(Active { machine: msg.machine });
+            } else if state == msg.target {
+                // Target stayed active (e.g. child→parent): re-insert to
+                // trigger Changed<Active> so systems can detect re-entry.
                 commands.entity(state).insert(Active { machine: msg.machine });
             }
         }

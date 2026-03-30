@@ -13,7 +13,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 /// Returns (app, vec of (machine, a, b, c) tuples).
 fn setup_app(n: usize) -> (App, Vec<(Entity, Entity, Entity, Entity)>) {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+    app.add_plugins((MinimalPlugins, GearboxPlugin));
 
     let mut machines = Vec::with_capacity(n);
 

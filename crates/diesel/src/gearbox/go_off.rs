@@ -17,7 +17,7 @@ macro_rules! go_off {
         )]
         pub struct $Event {
             pub entity: ::bevy::prelude::Entity,
-            pub targets: ::std::vec::Vec<$crate::target::Target<$Pos>>,
+            pub target: $crate::target::Target<$Pos>,
         }
 
         $crate::go_off!(@impl $Event, $Pos);
@@ -27,9 +27,9 @@ macro_rules! go_off {
         impl $Event {
             pub fn new(
                 entity: ::bevy::prelude::Entity,
-                targets: ::std::vec::Vec<$crate::target::Target<$Pos>>,
+                target: $crate::target::Target<$Pos>,
             ) -> Self {
-                Self { entity, targets }
+                Self { entity, target }
             }
         }
 
@@ -38,35 +38,13 @@ macro_rules! go_off {
             fn machine(&self) -> ::bevy::prelude::Entity { self.entity }
         }
 
-        impl From<::std::vec::Vec<$crate::target::Target<$Pos>>>
-            for $Event
-        {
-            fn from(
-                value: ::std::vec::Vec<$crate::target::Target<$Pos>>,
-            ) -> Self {
-                Self {
-                    entity: ::bevy::prelude::Entity::PLACEHOLDER,
-                    targets: value,
-                }
-            }
-        }
-
-        impl $crate::gearbox::repeater::Repeatable for $Event {
-            fn repeat_tick(entity: ::bevy::prelude::Entity) -> Self {
-                Self {
-                    entity,
-                    targets: ::std::vec::Vec::new(),
-                }
-            }
-        }
-
         impl ::bevy_gearbox::SideEffect<$Event> for $crate::effect::GoOffOrigin<$Pos> {
             fn produce(
                 matched: &::bevy_gearbox::Matched<$Event>,
             ) -> Option<Self> {
                 Some($crate::effect::GoOffOrigin::new(
                     matched.target,
-                    matched.message.targets.clone(),
+                    matched.message.target,
                 ))
             }
         }

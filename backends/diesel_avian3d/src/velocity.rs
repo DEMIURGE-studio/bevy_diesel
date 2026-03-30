@@ -58,9 +58,7 @@ fn velocity_effect_system(
     for go_off in reader.read() {
         let effect_entity = go_off.entity;
 
-        let Some(target) = go_off.targets.first() else {
-            continue;
-        };
+        let target = &go_off.target;
 
         let Ok(velocity_effect) = q_velocity.get(effect_entity) else {
             continue;

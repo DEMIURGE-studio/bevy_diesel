@@ -98,7 +98,7 @@ fn update_stats(mut q_machines: Query<(&Machine, &PingPong, &mut Stats)>) {
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, GearboxSchedulePlugin))
+        .add_plugins((DefaultPlugins, GearboxPlugin))
         .add_systems(Startup, setup)
         .add_systems(Update, trigger_transitions.before(GearboxSet))
         .add_systems(

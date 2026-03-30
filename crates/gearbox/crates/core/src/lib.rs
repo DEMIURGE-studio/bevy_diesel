@@ -93,14 +93,9 @@ pub use registration::{
     StateBridgeInstaller,
     DeferEvent, replay_deferred_messages, bridge_to_bevy_state,
 };
-pub use compat::{SimpleTransition, GearboxPlugin};
 pub use compat::guards;
 pub use compat::transitions;
 pub use compat::prelude;
-
-/// Placeholder for code that referenced `NoEvent`.
-#[derive(Clone, Default)]
-pub struct NoEvent;
 
 // ---------------------------------------------------------------------------
 // Schedule, sets & phases
@@ -212,9 +207,9 @@ fn run_gearbox_schedule(world: &mut World) {
 // Plugin
 // ---------------------------------------------------------------------------
 
-pub struct GearboxSchedulePlugin;
+pub struct GearboxPlugin;
 
-impl Plugin for GearboxSchedulePlugin {
+impl Plugin for GearboxPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<TransitionMessage>()
             .init_resource::<PendingCount>()
@@ -279,7 +274,7 @@ mod tests {
     #[test]
     fn chain_resolves_to_leaf() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -315,7 +310,7 @@ mod tests {
     #[test]
     fn cap_limits_resolution() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.insert_resource(IterationCap(2));
 
         let world = app.world_mut();
@@ -342,7 +337,7 @@ mod tests {
     #[test]
     fn stable_state_no_extra_iterations() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -366,7 +361,7 @@ mod tests {
     #[test]
     fn external_trigger() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -401,7 +396,7 @@ mod tests {
     #[test]
     fn parallel_exit_cleans_up_sibling_leaves() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -432,7 +427,7 @@ mod tests {
     #[test]
     fn stale_source_skipped_after_parallel_exit() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -462,7 +457,7 @@ mod tests {
     #[test]
     fn self_transition_exits_and_reenters() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         #[derive(Resource, Default)]
         struct EntryCount(u32);
@@ -521,7 +516,7 @@ mod tests {
     #[test]
     fn transition_from_composite_parent() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -565,7 +560,7 @@ mod tests {
         }
 
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         // Run before edge check so the guard is cleared in time
         app.add_systems(
             GearboxSchedule,
@@ -610,7 +605,7 @@ mod tests {
     #[test]
     fn active_component_tracks_entries_and_exits() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -659,7 +654,7 @@ mod tests {
     #[test]
     fn shallow_history_restores_child() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -732,7 +727,7 @@ mod tests {
     #[test]
     fn deep_history_restores_exact_leaves() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -801,7 +796,7 @@ mod tests {
         struct Speed(f32);
 
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.add_systems(
             GearboxSchedule,
             (
@@ -862,7 +857,7 @@ mod tests {
     #[test]
     fn message_edge_triggers_transition() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TestMsg>();
 
         let world = app.world_mut();
@@ -897,7 +892,7 @@ mod tests {
     #[test]
     fn message_edge_respects_guards() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TestMsg>();
 
         let world = app.world_mut();
@@ -955,7 +950,7 @@ mod tests {
         }
 
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TypedMsg>();
 
         let world = app.world_mut();
@@ -1006,7 +1001,7 @@ mod tests {
     #[test]
     fn message_deeper_state_has_priority() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TestMsg>();
 
         let world = app.world_mut();
@@ -1052,7 +1047,7 @@ mod tests {
     #[test]
     fn message_parallel_regions_each_fire() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TestMsg>();
 
         let world = app.world_mut();
@@ -1095,7 +1090,7 @@ mod tests {
     #[test]
     fn register_transition_dedup() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
         app.register_transition::<TestMsg>();
         app.register_transition::<TestMsg>(); // should not panic or double-register
         // If it doubled, we'd get duplicate TransitionMessages per msg — test indirectly
@@ -1129,7 +1124,7 @@ mod tests {
     #[test]
     fn internal_transition_does_not_exit_source() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -1170,7 +1165,7 @@ mod tests {
     #[test]
     fn delayed_always_edge_creates_timer_and_skips_immediate() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -1223,7 +1218,7 @@ mod tests {
     #[test]
     fn reset_edge_clears_history() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
+        app.add_plugins((MinimalPlugins, GearboxPlugin));
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
