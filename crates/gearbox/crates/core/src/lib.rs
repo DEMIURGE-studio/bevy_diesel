@@ -37,7 +37,7 @@ pub mod parameters;
 pub mod delay;
 pub mod commands;
 pub mod registration;
-pub mod compat;
+pub mod prelude;
 pub mod helpers;
 
 use bevy::ecs::schedule::ScheduleLabel;
@@ -93,9 +93,6 @@ pub use registration::{
     StateBridgeInstaller,
     DeferEvent, replay_deferred_messages, bridge_to_bevy_state,
 };
-pub use compat::guards;
-pub use compat::transitions;
-pub use compat::prelude;
 
 // ---------------------------------------------------------------------------
 // Schedule, sets & phases
