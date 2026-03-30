@@ -5,12 +5,12 @@ use bevy::prelude::*;
 
 /// Marks an entity as a state machine root and tracks active states.
 #[derive(Component, Default, Debug)]
-pub struct Machine {
+pub struct StateMachine {
     pub active: HashSet<Entity>,
     pub active_leaves: HashSet<Entity>,
 }
 
-impl Machine {
+impl StateMachine {
     pub fn new() -> Self {
         Self::default()
     }
@@ -18,6 +18,16 @@ impl Machine {
     pub fn is_active(&self, entity: &Entity) -> bool {
         self.active.contains(entity)
     }
+}
+
+/// Marker inserted on state entities that are currently active.
+///
+/// Use `Added<Active>` to detect newly entered states and
+/// `RemovedComponents<Active>` to detect exits.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Active {
+    /// The state machine root entity this state belongs to.
+    pub machine: Entity,
 }
 
 /// Which child state to enter by default when a parent state is entered.

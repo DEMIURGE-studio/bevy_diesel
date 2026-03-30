@@ -4,19 +4,24 @@
 //! this crate uses a dedicated [`GearboxSchedule`] that runs in a loop:
 //!
 //! 1. Systems read pending [`TransitionMessage`]s via [`MessageReader`]
-//! 2. They compute exits/entries, update [`Machine`], and populate [`TransitionLog`]
-//! 3. User systems in [`GearboxPhase::ExitPhase`] / [`GearboxPhase::EntryPhase`] react
-//! 4. [`check_always_edges`] may produce *new* messages (e.g. AlwaysEdge becoming eligible)
-//! 5. The schedule runs again until no new messages are produced or [`IterationCap`] is hit
+//! 2. They compute exits/entries, update [`StateMachine`], and insert/remove [`Active`]
+//! 3. Commands flush — [`Active`] changes are visible to subsequent phases
+//! 4. User systems in [`GearboxPhase::ExitPhase`] / [`GearboxPhase::EntryPhase`] react
+//!    via `Added<Active>` and `RemovedComponents<Active>` queries
+//! 5. [`check_always_edges`] may produce *new* messages (e.g. AlwaysEdge becoming eligible)
+//! 6. The schedule runs again until no new messages are produced or [`IterationCap`] is hit
 //!
 //! ```text
 //! GearboxSchedule (loops until converged):
-//!   ClearPhase      <- reset TransitionLog
-//!   TransitionPhase <- resolve_transitions (internal)
-//!   ExitPhase       <- user systems reacting to exited states
-//!   EntryPhase      <- user systems reacting to entered states
+//!   TransitionPhase <- resolve_transitions (inserts/removes Active)
+//!   apply_deferred  <- flush commands so Active is visible
+//!   ExitPhase       <- user systems reacting to RemovedComponents<Active>
+//!   EntryPhase      <- user systems reacting to Added<Active>
 //!   EdgeCheckPhase  <- check_always_edges (internal)
 //! ```
+//!
+//! After the schedule converges, [`EnterState`] / [`ExitState`] entity events
+//! are triggered for observer-based consumers.
 //!
 //! Timer ticking, parameter sync, and other per-frame work belongs in
 //! [`Update`] ordered relative to [`GearboxSet`].
@@ -45,7 +50,8 @@ use resolve::PendingCount;
 // ---------------------------------------------------------------------------
 
 pub use components::{
-    Machine, InitialState, SubstateOf, Substates, Source, Transitions, Target,
+    Active,
+    StateMachine, InitialState, SubstateOf, Substates, Source, Transitions, Target,
     AlwaysEdge, EdgeKind, Guards, Guard, GuardProvider, Delay, EdgeTimer,
     ResetEdge, ResetScope,
 };
@@ -56,8 +62,8 @@ pub use state_component::{
     state_inactive_component_enter, state_inactive_component_exit,
 };
 pub use resolve::{
-    TransitionRecord, TransitionLog, TransitionMessage,
-    FrameTransitionLog,
+    TransitionMessage,
+    EnterState, ExitState,
 };
 pub use messages::{
     GearboxMessage, MessageValidator, AcceptAll, MessageEdge, Matched,
@@ -87,7 +93,7 @@ pub use registration::{
     StateBridgeInstaller,
     DeferEvent, replay_deferred_messages, bridge_to_bevy_state,
 };
-pub use compat::{SimpleTransition, StateMachine, GearboxPlugin};
+pub use compat::{SimpleTransition, GearboxPlugin};
 pub use compat::guards;
 pub use compat::transitions;
 pub use compat::prelude;
@@ -115,17 +121,19 @@ pub struct GearboxSchedule;
 pub struct GearboxSet;
 
 /// System sets within [`GearboxSchedule`], executed in order each iteration.
+///
+/// Commands are flushed between `TransitionPhase` and `ExitPhase` so that
+/// [`Active`] component changes are visible to user systems.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GearboxPhase {
-    /// Internal: clears [`TransitionLog`] for this iteration.
-    ClearPhase,
-    /// Internal: reads transition messages and updates [`Machine`].
+    /// Internal: reads transition messages, updates [`StateMachine`],
+    /// and inserts/removes [`Active`] components.
     TransitionPhase,
-    /// User systems that react to states being exited. Read [`TransitionLog`]
-    /// to see which states were exited this iteration.
+    /// User systems that react to states being exited.
+    /// Query `RemovedComponents<Active>` to detect exits.
     ExitPhase,
-    /// User systems that react to states being entered. Read [`TransitionLog`]
-    /// to see which states were entered this iteration.
+    /// User systems that react to states being entered.
+    /// Query `Added<Active>` to detect entries.
     EntryPhase,
     /// Internal: checks AlwaysEdge eligibility and writes new messages.
     EdgeCheckPhase,
@@ -150,9 +158,9 @@ impl Default for IterationCap {
 // Initialization system (runs in Update, writes init messages)
 // ---------------------------------------------------------------------------
 
-/// Detect newly-added Machine components and write initialization messages.
+/// Detect newly-added StateMachine components and write initialization messages.
 fn enqueue_machine_init(
-    q_new_machines: Query<(Entity, &InitialState), Added<Machine>>,
+    q_new_machines: Query<(Entity, &InitialState), Added<StateMachine>>,
     mut writer: MessageWriter<TransitionMessage>,
 ) {
     for (entity, initial) in &q_new_machines {
@@ -210,13 +218,10 @@ impl Plugin for GearboxSchedulePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<TransitionMessage>()
             .init_resource::<PendingCount>()
-            .init_resource::<IterationCap>()
-            .init_resource::<TransitionLog>()
-            .init_resource::<FrameTransitionLog>();
+            .init_resource::<IterationCap>();
 
         let mut schedule = Schedule::new(GearboxSchedule);
         schedule.configure_sets((
-            GearboxPhase::ClearPhase,
             GearboxPhase::TransitionPhase,
             GearboxPhase::ExitPhase,
             GearboxPhase::EntryPhase,
@@ -227,26 +232,35 @@ impl Plugin for GearboxSchedulePlugin {
         app.add_systems(
             GearboxSchedule,
             (
-                resolve::clear_transition_log.in_set(GearboxPhase::ClearPhase),
                 resolve::resolve_transitions.in_set(GearboxPhase::TransitionPhase),
+                // ApplyDeferred flushes Active insert/remove commands
+                // so ExitPhase/EntryPhase systems see the changes.
+                ApplyDeferred
+                    .after(GearboxPhase::TransitionPhase)
+                    .before(GearboxPhase::ExitPhase),
                 delay::cancel_delay_timers.in_set(GearboxPhase::ExitPhase),
                 delay::start_delay_timers.in_set(GearboxPhase::EntryPhase),
                 resolve::check_always_edges.in_set(GearboxPhase::EdgeCheckPhase),
-                resolve::accumulate_frame_log.in_set(GearboxPhase::EdgeCheckPhase),
             ),
         );
 
-        // Outer driver: clear frame log, detect new machines, run loop, tick timers
+        // Outer driver: detect new machines, run loop, tick timers,
+        // then flush entity events for observer users.
         app.add_systems(
             Update,
             (
-                resolve::clear_frame_log,
                 enqueue_machine_init,
                 run_gearbox_schedule,
                 delay::tick_delay_timers,
             )
                 .chain()
                 .in_set(GearboxSet),
+        );
+        app.add_systems(
+            Update,
+            resolve::flush_state_events
+                .in_set(GearboxSet)
+                .after(delay::tick_delay_timers),
         );
     }
 }
@@ -278,11 +292,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
-        let machine_state = app.world().get::<Machine>(machine).unwrap();
+        let machine_state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             machine_state.is_active(&c),
             "C should be active, got active: {:?}",
@@ -315,11 +329,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
-        let machine_state = app.world().get::<Machine>(machine).unwrap();
+        let machine_state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(machine_state.is_active(&b));
         assert!(!machine_state.active_leaves.contains(&c));
     }
@@ -339,11 +353,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
-        let machine_state = app.world().get::<Machine>(machine).unwrap();
+        let machine_state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(machine_state.is_active(&a));
         assert!(!machine_state.is_active(&b));
     }
@@ -361,10 +375,10 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().is_active(&a));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().is_active(&a));
 
         app.world_mut().write_message(TransitionMessage {
             machine,
@@ -374,7 +388,7 @@ mod tests {
         });
 
         app.update();
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.is_active(&b));
         assert!(!state.active_leaves.contains(&a));
     }
@@ -401,11 +415,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&d));
         assert!(!state.active_leaves.contains(&a));
         assert!(!state.active_leaves.contains(&b));
@@ -433,11 +447,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&d));
         assert!(!state.active_leaves.contains(&a));
         assert!(!state.active_leaves.contains(&b));
@@ -457,7 +471,7 @@ mod tests {
         struct Marker;
 
         fn count_entries(
-            q_machine: Query<&Machine, With<Marker>>,
+            q_machine: Query<&StateMachine, With<Marker>>,
             mut count: ResMut<EntryCount>,
         ) {
             for machine in &q_machine {
@@ -479,7 +493,7 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a), Marker));
+            .insert((StateMachine::new(), InitialState(a), Marker));
 
         app.update();
         let count_after_init = app.world().resource::<EntryCount>().0;
@@ -492,7 +506,7 @@ mod tests {
         });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&a));
 
         let count_after_self = app.world().resource::<EntryCount>().0;
@@ -521,11 +535,11 @@ mod tests {
         world.entity_mut(p).insert(InitialState(a));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&d));
         assert!(!state.active_leaves.contains(&a));
     }
@@ -538,7 +552,7 @@ mod tests {
         struct GuardedEdgeMarker;
 
         fn clear_guard_when_active(
-            q_machine: Query<&Machine>,
+            q_machine: Query<&StateMachine>,
             mut q_guards: Query<&mut Guards, With<GuardedEdgeMarker>>,
         ) {
             for machine in &q_machine {
@@ -575,11 +589,11 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
-        let machine_state = app.world().get::<Machine>(machine).unwrap();
+        let machine_state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             machine_state.is_active(&b),
             "B should be active — user system cleared the guard mid-resolution. \
@@ -589,30 +603,14 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // TransitionLog tests
+    // Active component tests
     // -----------------------------------------------------------------------
 
-    /// TransitionLog records exited and entered states.
+    /// Active component is inserted on entered states and removed on exited states.
     #[test]
-    fn transition_log_records_entries_and_exits() {
-        #[derive(Resource, Default)]
-        struct Captured {
-            entered: Vec<(Entity, Entity)>,
-            exited: Vec<(Entity, Entity)>,
-        }
-
-        fn capture_log(log: Res<TransitionLog>, mut captured: ResMut<Captured>) {
-            captured.entered.extend(log.all_entered());
-            captured.exited.extend(log.all_exited());
-        }
-
+    fn active_component_tracks_entries_and_exits() {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, GearboxSchedulePlugin));
-        app.init_resource::<Captured>();
-        app.add_systems(
-            GearboxSchedule,
-            capture_log.in_set(GearboxPhase::EntryPhase),
-        );
 
         let world = app.world_mut();
         let machine = world.spawn_empty().id();
@@ -623,22 +621,22 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
-        let captured = app.world().resource::<Captured>();
-        // Init enters A, then A->B exits A and enters B
+        // After convergence: A->B fires, so B should have Active, A should not
         assert!(
-            captured.entered.iter().any(|&(m, s)| m == machine && s == b),
-            "B should appear in entered, got: {:?}",
-            captured.entered
+            app.world().get::<Active>(b).is_some(),
+            "B should have Active component"
         );
         assert!(
-            captured.exited.iter().any(|&(m, s)| m == machine && s == a),
-            "A should appear in exited, got: {:?}",
-            captured.exited
+            app.world().get::<Active>(a).is_none(),
+            "A should NOT have Active component (it was exited)"
         );
+        // Active should carry the correct machine reference
+        let active = app.world().get::<Active>(b).unwrap();
+        assert_eq!(active.machine, machine);
     }
 
     // -----------------------------------------------------------------------
@@ -649,7 +647,7 @@ mod tests {
     /// that was active when it was last exited.
     ///
     /// ```text
-    /// Machine
+    /// StateMachine
     /// +-- P (History::Shallow, InitialState=A)
     /// |   +-- A
     /// |   +-- B
@@ -673,11 +671,11 @@ mod tests {
         world.entity_mut(p).insert(InitialState(a));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         // Init -> P/A
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&a));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&a));
 
         // A -> B
         app.world_mut().write_message(TransitionMessage {
@@ -687,7 +685,7 @@ mod tests {
             edge: None,
         });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&b));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&b));
 
         // P -> D (exits P, saves history: B was the active child)
         app.world_mut().write_message(TransitionMessage {
@@ -697,7 +695,7 @@ mod tests {
             edge: None,
         });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&d));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&d));
 
         // D -> P (re-enters P; shallow history should restore B, not A)
         app.world_mut().write_message(TransitionMessage {
@@ -708,7 +706,7 @@ mod tests {
         });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&b),
             "Shallow history should restore B, got leaves: {:?}",
@@ -721,7 +719,7 @@ mod tests {
     /// configuration that was active when it was last exited.
     ///
     /// ```text
-    /// Machine
+    /// StateMachine
     /// +-- P (History::Deep, InitialState=Q)
     /// |   +-- Q (InitialState=X)
     /// |       +-- X
@@ -748,11 +746,11 @@ mod tests {
         world.entity_mut(p).insert(InitialState(q));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         // Init -> P/Q/X
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&x));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&x));
 
         // X -> Y
         app.world_mut().write_message(TransitionMessage {
@@ -762,7 +760,7 @@ mod tests {
             edge: None,
         });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&y));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&y));
 
         // P -> D
         app.world_mut().write_message(TransitionMessage {
@@ -772,7 +770,7 @@ mod tests {
             edge: None,
         });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&d));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&d));
 
         // D -> P (deep history should restore Y directly)
         app.world_mut().write_message(TransitionMessage {
@@ -783,7 +781,7 @@ mod tests {
         });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&y),
             "Deep history should restore Y, got leaves: {:?}",
@@ -819,7 +817,7 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         // Init -> A: Speed should be inserted on machine root
         app.update();
@@ -877,16 +875,16 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().is_active(&a));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().is_active(&a));
 
         // Send the message
         app.world_mut().write_message(TestMsg { machine });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&b),
             "B should be active after TestMsg, got leaves: {:?}",
@@ -918,7 +916,7 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
@@ -926,7 +924,7 @@ mod tests {
         app.world_mut().write_message(TestMsg { machine });
         app.update();
         assert!(
-            app.world().get::<Machine>(machine).unwrap().is_active(&a),
+            app.world().get::<StateMachine>(machine).unwrap().is_active(&a),
             "Should stay in A when guard is active"
         );
     }
@@ -974,19 +972,19 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
 
         // Wrong kind — should not fire
         app.world_mut().write_message(TypedMsg { machine, kind: 1 });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().is_active(&a));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().is_active(&a));
 
         // Right kind — should fire
         app.world_mut().write_message(TypedMsg { machine, kind: 42 });
         app.update();
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&b),
             "Should transition on kind=42, got leaves: {:?}",
@@ -997,7 +995,7 @@ mod tests {
     /// Statechart semantics: deeper states get priority over ancestors.
     ///
     /// ```text
-    /// Machine
+    /// StateMachine
     /// +-- P (InitialState=A)
     /// |   +-- A (leaf) --[TestMsg]--> B
     /// |   +-- B (leaf)
@@ -1026,15 +1024,15 @@ mod tests {
         world.entity_mut(p).insert(InitialState(a));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().is_active(&a));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().is_active(&a));
 
         app.world_mut().write_message(TestMsg { machine });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&b),
             "A->B should fire (deeper state priority), got leaves: {:?}",
@@ -1046,7 +1044,7 @@ mod tests {
     /// Parallel regions each get one transition per message.
     ///
     /// ```text
-    /// Machine
+    /// StateMachine
     /// +-- P (parallel)
     /// |   +-- A --[TestMsg]--> A2
     /// |   +-- B --[TestMsg]--> B2
@@ -1070,17 +1068,17 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&a));
         assert!(state.active_leaves.contains(&b));
 
         app.world_mut().write_message(TestMsg { machine });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&a2),
             "A->A2 should fire in region A, got leaves: {:?}",
@@ -1112,13 +1110,13 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         app.update();
         app.world_mut().write_message(TestMsg { machine });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(state.active_leaves.contains(&b));
     }
 
@@ -1145,11 +1143,11 @@ mod tests {
         world.entity_mut(p).insert(InitialState(a));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&b),
             "B should be active, got leaves: {:?}",
@@ -1190,12 +1188,12 @@ mod tests {
 
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(a)));
+            .insert((StateMachine::new(), InitialState(a)));
 
         // First frame: enter A, start timer, but do NOT fire immediately
         app.update();
         assert!(
-            app.world().get::<Machine>(machine).unwrap().is_active(&a),
+            app.world().get::<StateMachine>(machine).unwrap().is_active(&a),
             "Should stay in A — delay not elapsed"
         );
         // EdgeTimer should have been created on the edge entity
@@ -1212,7 +1210,7 @@ mod tests {
     /// ResetEdge(Target) clears history under the target before re-entering.
     ///
     /// ```text
-    /// Machine
+    /// StateMachine
     /// +-- P (History::Deep, InitialState=Q)
     /// |   +-- Q (InitialState=X)
     /// |       +-- X
@@ -1239,7 +1237,7 @@ mod tests {
         world.entity_mut(p).insert(InitialState(q));
         world
             .entity_mut(machine)
-            .insert((Machine::new(), InitialState(p)));
+            .insert((StateMachine::new(), InitialState(p)));
 
         // Edge D -> P with ResetEdge(Target) (NOT AlwaysEdge — we trigger manually)
         let reset_edge = world
@@ -1248,7 +1246,7 @@ mod tests {
 
         // Init -> P/Q/X
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&x));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&x));
 
         // X -> Y
         app.world_mut().write_message(TransitionMessage {
@@ -1267,7 +1265,7 @@ mod tests {
             edge: None,
         });
         app.update();
-        assert!(app.world().get::<Machine>(machine).unwrap().active_leaves.contains(&d));
+        assert!(app.world().get::<StateMachine>(machine).unwrap().active_leaves.contains(&d));
 
         // D -> P with the ResetEdge — use the edge entity so ResetEdge is checked
         app.world_mut().write_message(TransitionMessage {
@@ -1278,7 +1276,7 @@ mod tests {
         });
         app.update();
 
-        let state = app.world().get::<Machine>(machine).unwrap();
+        let state = app.world().get::<StateMachine>(machine).unwrap();
         assert!(
             state.active_leaves.contains(&x),
             "Reset should clear history, restoring to InitialState (X). Got leaves: {:?}",

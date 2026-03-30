@@ -1,8 +1,8 @@
 [package]
 name = "bevy_gearbox_schedule"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Experimental: schedule-based state machine resolution for bevy_gearbox"
+description = "Schedule-based state machine resolution for bevy_gearbox"
 
 [lib]
 name = "bevy_gearbox_schedule"

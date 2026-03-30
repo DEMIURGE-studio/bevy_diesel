@@ -25,7 +25,6 @@ pub mod prelude {
     };
     pub use crate::velocity::{Trajectory, VelocityEffect, VelocityEffectPlugin};
     pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
-    pub use crate::{on_spawn_invoker, on_spawn_origin, on_spawn_target};
     pub use bevy_diesel::prelude::*;
 
     // Vec3 type aliases
@@ -330,17 +329,6 @@ impl Plugin for AvianDieselPlugin {
         collision::plugin(app);
     }
 }
-
-// ---------------------------------------------------------------------------
-// Concrete Vec3 spawn observer helpers
-// ---------------------------------------------------------------------------
-
-// TODO: These were observer-based OnSpawn* → GoOff forwarders.
-// In the schedule version, the TransitionEvent::to_entry_event mechanism
-// is gone. Spawn-event side effects need a FrameTransitionLog-based system.
-pub fn on_spawn_origin() {}
-pub fn on_spawn_target() {}
-pub fn on_spawn_invoker() {}
 
 // ---------------------------------------------------------------------------
 // Spatial query helpers

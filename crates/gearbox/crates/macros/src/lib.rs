@@ -1,127 +1,179 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Item, Meta, Expr, Path};
+use syn::{parse_macro_input, DeriveInput, Item, ItemImpl, Meta, Expr, Path, Data, Fields};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::Token;
 
-/// Derive macro for simple events that don't need phase-specific payloads.
-/// 
-/// This macro implements `TransitionEvent` for simple events by setting all
-/// associated types to `NoEvent` and returning `None` for all phase methods.
-/// 
+/// Attribute macro that turns a struct into a gearbox transition message.
+///
+/// The struct must have a field named `machine` of type `Entity`.
+/// This generates:
+/// - `#[derive(Message, Clone)]` on the struct
+/// - `impl GearboxMessage` with `type Validator = AcceptAll`
+/// - An inventory auto-registration entry
+///
 /// # Example
-///  
+///
 /// ```rust
 /// use bevy::prelude::*;
-/// use bevy_gearbox_macros::SimpleTransition;
-/// 
-/// #[derive(Event, Clone, SimpleTransition)]
-/// struct MySimpleEvent;
-/// ```
-/// 
-/// This is equivalent to manually implementing:
-/// 
-/// ```rust
-/// impl TransitionEvent for MySimpleEvent {
-///     type ExitEvent = NoEvent;
-///     type EdgeEvent = NoEvent;
-///     type EntryEvent = NoEvent;
-///     
-///     fn to_exit_event(&self, _exiting: Entity, _entering: Entity, _edge: Entity) -> Option<Self::ExitEvent> { None }
-///     fn to_edge_event(&self, _edge: Entity) -> Option<Self::EdgeEvent> { None }
-///     fn to_entry_event(&self, _entering: Entity, _exiting: Entity, _edge: Entity) -> Option<Self::EntryEvent> { None }
+///
+/// #[gearbox_message]
+/// struct Attack {
+///     machine: Entity,
+///     damage: f32,
 /// }
 /// ```
-#[proc_macro_derive(SimpleTransition)]
-pub fn derive_simple_transition(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
-    
+#[proc_macro_attribute]
+pub fn gearbox_message(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed: Item = syn::parse(item)
+        .expect("#[gearbox_message] must be applied to a struct");
+
+    let name = match &parsed {
+        Item::Struct(s) => {
+            // Verify it has a `machine` field
+            match &s.fields {
+                Fields::Named(fields) => {
+                    let has_machine = fields.named.iter().any(|f| {
+                        f.ident.as_ref().map(|i| i == "machine").unwrap_or(false)
+                    });
+                    if !has_machine {
+                        return syn::Error::new_spanned(
+                            &s.ident,
+                            "#[gearbox_message] requires a `machine: Entity` field",
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+                _ => {
+                    return syn::Error::new_spanned(
+                        &s.ident,
+                        "#[gearbox_message] can only be applied to structs with named fields",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            }
+            s.ident.clone()
+        }
+        _ => panic!("#[gearbox_message] can only be applied to structs"),
+    };
+
     let expanded = quote! {
-        impl bevy_gearbox::TransitionEvent for #name {
-            type ExitEvent = bevy_gearbox::NoEvent;
-            type EdgeEvent = bevy_gearbox::NoEvent;
-            type EntryEvent = bevy_gearbox::NoEvent;
+        #[derive(bevy::prelude::Message, Clone)]
+        #parsed
+
+        impl bevy_gearbox::GearboxMessage for #name {
             type Validator = bevy_gearbox::AcceptAll;
-            
-            fn to_exit_event(&self, _exiting: bevy::prelude::Entity, _entering: bevy::prelude::Entity, _edge: bevy::prelude::Entity) -> Option<Self::ExitEvent> { None }
-            fn to_edge_event(&self, _edge: bevy::prelude::Entity) -> Option<Self::EdgeEvent> { None }
-            fn to_entry_event(&self, _entering: bevy::prelude::Entity, _exiting: bevy::prelude::Entity, _edge: bevy::prelude::Entity) -> Option<Self::EntryEvent> { None }
+
+            fn machine(&self) -> bevy::prelude::Entity {
+                self.machine
+            }
         }
 
         bevy_gearbox::inventory::submit! {
-            bevy_gearbox::registration::TransitionInstaller { install: bevy_gearbox::registration::register_transition::<#name> }
+            bevy_gearbox::registration::TransitionInstaller {
+                install: bevy_gearbox::registration::register_transition::<#name>
+            }
         }
     };
-    
+
     TokenStream::from(expanded)
 }
 
-/// Attribute macro variant to auto-register a state component type `T`.
+/// Attribute macro to auto-register a transition message type via inventory.
 ///
-/// Usage:
+/// Use this on types that already implement `GearboxMessage` manually
+/// (e.g. with a custom validator). The macro just submits the inventory installer.
+///
+/// # Example
+///
 /// ```rust
-/// #[register_state_component]
-/// #[derive(Component, Reflect, FromReflect, Clone)]
+/// #[transition_message]
+/// #[derive(Message, Clone)]
+/// struct Attack {
+///     machine: Entity,
+///     damage: f32,
+/// }
+///
+/// impl GearboxMessage for Attack {
+///     type Validator = MyCustomValidator;
+///     fn machine(&self) -> Entity { self.machine }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn transition_message(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed: Item = syn::parse(item).expect("#[transition_message] must be applied to a type item");
+    let name = match &parsed {
+        Item::Struct(s) => &s.ident,
+        Item::Enum(e) => &e.ident,
+        _ => panic!("#[transition_message] supports only structs or enums"),
+    };
+
+    let expanded = quote! {
+        #parsed
+
+        bevy_gearbox::inventory::submit! {
+            bevy_gearbox::registration::TransitionInstaller {
+                install: bevy_gearbox::registration::register_transition::<#name>
+            }
+        }
+    };
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro to auto-register a state component type via inventory.
+///
+/// # Example
+///
+/// ```rust
+/// #[state_component]
+/// #[derive(Component, Reflect, Clone)]
 /// struct MyFlag;
 /// ```
 #[proc_macro_attribute]
 pub fn state_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut parsed: Item = syn::parse(item.clone()).expect("#[register_state_component] must be applied to a type item");
-
-    let name_ident = match &mut parsed {
-        Item::Struct(s) => { s.ident.clone() }
-        Item::Enum(e) => { e.ident.clone() }
-        _ => panic!("#[bevy_state_bridge] supports only structs or enums"),
-    };
-
-    let expanded = quote! {
-        #parsed
-
-        bevy_gearbox::inventory::submit! {
-            bevy_gearbox::registration::StateInstaller { install: bevy_gearbox::registration::register_state_component::<#name_ident> }
-        }
-    };
-    TokenStream::from(expanded)
-}
-
-/// Apply to the event type definition. It implements the marker and submits an installer.
-#[proc_macro_attribute]
-pub fn transition_event(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let parsed: Item = syn::parse(item.clone()).expect("#[register_transition] must be applied to a type item");
+    let parsed: Item = syn::parse(item).expect("#[state_component] must be applied to a type item");
     let name = match &parsed {
         Item::Struct(s) => &s.ident,
         Item::Enum(e) => &e.ident,
-        _ => panic!("#[register_transition] supports only structs or enums"),
+        _ => panic!("#[state_component] supports only structs or enums"),
     };
 
     let expanded = quote! {
         #parsed
 
         bevy_gearbox::inventory::submit! {
-            bevy_gearbox::registration::TransitionInstaller { install: bevy_gearbox::registration::register_transition::<#name> }
+            bevy_gearbox::registration::StateInstaller {
+                install: bevy_gearbox::registration::register_state_component::<#name>
+            }
         }
     };
     TokenStream::from(expanded)
 }
 
-/// Attribute on a parameter marker that wires guards and optionally the sync binding.
-/// Usage examples:
-///   #[gearbox_param(kind = "bool", source = Hitpoints)]
+/// Attribute macro to auto-register a parameter with guard wiring and optional sync binding.
+///
+/// # Example
+///
+/// ```rust
+/// #[gearbox_param(kind = "float", source = Hitpoints)]
+/// #[derive(Component)]
+/// struct HpParam;
+/// ```
 #[proc_macro_attribute]
 pub fn gearbox_param(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = Punctuated::<Meta, Token![,]>::parse_terminated
         .parse(attr)
         .expect("failed to parse #[gearbox_param] arguments");
-    let parsed: Item = syn::parse(item.clone()).expect("#[gearbox_param] must be applied to a type item");
+    let parsed: Item = syn::parse(item).expect("#[gearbox_param] must be applied to a type item");
     let name = match &parsed {
         Item::Struct(s) => &s.ident,
         Item::Enum(e) => &e.ident,
         _ => panic!("#[gearbox_param] supports only structs or enums"),
     };
 
-    // Parse args: kind = "bool"|"int"|"float", optional source = Type
     let mut kind: Option<String> = None;
     let mut source_path: Option<Path> = None;
     for meta in args {
@@ -157,14 +209,13 @@ pub fn gearbox_param(attr: TokenStream, item: TokenStream) -> TokenStream {
         } else if kind == "float" {
             quote! { bevy_gearbox::registration::register_float_param_binding::<#src_ty, #name> }
         } else {
-            // No bool binding registration function in the new API
             quote!{}
         }
     } else {
         quote!{}
     };
 
-    let binding_installer = if let Some(_) = source_path {
+    let binding_installer = if source_path.is_some() {
         if kind == "int" || kind == "float" {
             let ty = if kind == "int" {
                 quote! { bevy_gearbox::registration::IntParamBindingInstaller }
@@ -175,15 +226,17 @@ pub fn gearbox_param(attr: TokenStream, item: TokenStream) -> TokenStream {
                 bevy_gearbox::inventory::submit! { #ty { install: #sync_install } }
             }
         } else {
-            // Skip bool bindings to match the available registration methods
             quote!{}
         }
     } else { quote!{} };
 
     let guard_installer_ty = if kind == "bool" {
         quote! { bevy_gearbox::registration::BoolParamInstaller }
-    } else if kind == "int" { quote! { bevy_gearbox::registration::IntParamInstaller } }
-    else { quote! { bevy_gearbox::registration::FloatParamInstaller } };
+    } else if kind == "int" {
+        quote! { bevy_gearbox::registration::IntParamInstaller }
+    } else {
+        quote! { bevy_gearbox::registration::FloatParamInstaller }
+    };
 
     let expanded = quote! {
         #parsed
@@ -197,23 +250,83 @@ pub fn gearbox_param(attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Attribute macro variant to auto-register a Bevy `States` bridge and inject derives.
-/// Ensures `#[derive(States)]`, `#[derive(Component)]`, `#[derive(Default)]`, and `#[derive(Clone)]` exist.
+/// Attribute macro to auto-register a Bevy `States` bridge via inventory.
+///
+/// # Example
+///
+/// ```rust
+/// #[state_bridge]
+/// #[derive(States, Component, Default, Clone, Hash, PartialEq, Eq, Debug)]
+/// enum GameState { #[default] Menu, Playing }
+/// ```
 #[proc_macro_attribute]
 pub fn state_bridge(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut parsed: Item = syn::parse(item.clone()).expect("#[bevy_state_bridge] must be applied to a type item");
-
-    let name_ident = match &mut parsed {
-        Item::Struct(s) => { s.ident.clone() }
-        Item::Enum(e) => { e.ident.clone() }
-        _ => panic!("#[bevy_state_bridge] supports only structs or enums"),
+    let parsed: Item = syn::parse(item).expect("#[state_bridge] must be applied to a type item");
+    let name = match &parsed {
+        Item::Struct(s) => &s.ident,
+        Item::Enum(e) => &e.ident,
+        _ => panic!("#[state_bridge] supports only structs or enums"),
     };
 
     let expanded = quote! {
         #parsed
 
         bevy_gearbox::inventory::submit! {
-            bevy_gearbox::registration::StateBridgeInstaller { install: bevy_gearbox::registration::register_state_bridge::<#name_ident> }
+            bevy_gearbox::registration::StateBridgeInstaller {
+                install: bevy_gearbox::registration::register_state_bridge::<#name>
+            }
+        }
+    };
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro to auto-register a side effect via inventory.
+///
+/// Place on an `impl SideEffect<M> for S` block. The macro extracts both
+/// the message type `M` and the side effect type `S` from the impl header
+/// and submits an inventory installer.
+///
+/// # Example
+///
+/// ```rust
+/// #[side_effect]
+/// impl SideEffect<StartInvoke> for GoOff {
+///     fn produce(matched: &Matched<StartInvoke>) -> Option<Self> {
+///         Some(GoOff::new(matched.target, matched.message.targets.clone()))
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn side_effect(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed: ItemImpl = syn::parse(item)
+        .expect("#[side_effect] must be applied to an `impl SideEffect<M> for S` block");
+
+    // Extract the self type (S — the side effect type)
+    let self_ty = &parsed.self_ty;
+
+    // Extract M from the trait path: SideEffect<M>
+    let (_, trait_path, _) = parsed.trait_.as_ref()
+        .expect("#[side_effect] must be on a trait impl (impl SideEffect<M> for S)");
+
+    let last_segment = trait_path.segments.last()
+        .expect("#[side_effect] could not parse trait path");
+
+    let message_ty = match &last_segment.arguments {
+        syn::PathArguments::AngleBracketed(args) => {
+            args.args.first()
+                .expect("#[side_effect] SideEffect must have a type parameter")
+                .clone()
+        }
+        _ => panic!("#[side_effect] expected SideEffect<M> with angle-bracketed type parameter"),
+    };
+
+    let expanded = quote! {
+        #parsed
+
+        bevy_gearbox::inventory::submit! {
+            bevy_gearbox::registration::SideEffectInstaller {
+                install: bevy_gearbox::registration::register_side_effect::<#message_ty, #self_ty>
+            }
         }
     };
     TokenStream::from(expanded)

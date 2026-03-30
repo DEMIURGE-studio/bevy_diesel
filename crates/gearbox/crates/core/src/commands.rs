@@ -183,9 +183,9 @@ pub trait InitStateMachine {
 impl InitStateMachine for EntityCommands<'_> {
     fn init_state_machine(&mut self, initial_state: impl Into<Option<Entity>>) -> &mut Self {
         if let Some(state) = initial_state.into() {
-            self.insert((Machine::new(), InitialState(state)))
+            self.insert((StateMachine::new(), InitialState(state)))
         } else {
-            self.insert(Machine::new())
+            self.insert(StateMachine::new())
         }
     }
 }

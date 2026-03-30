@@ -8,6 +8,7 @@ members = [
   "crates/gearbox/crates/core",
   "crates/gearbox/crates/editor",
   "crates/gearbox/crates/legacy",
+  "crates/gearbox/crates/legacy_macros",
   "crates/gearbox/crates/macros",
   "crates/gearbox/crates/protocol",
 ]

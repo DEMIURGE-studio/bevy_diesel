@@ -1,18 +1,18 @@
 use bevy::prelude::*;
 
 use crate::components::*;
-use crate::resolve::{TransitionLog, TransitionMessage};
+use crate::resolve::TransitionMessage;
 
 /// Start timers for AlwaysEdge+Delay edges when their source state is entered.
 /// Runs in [`GearboxPhase::EntryPhase`](crate::GearboxPhase::EntryPhase).
 pub(crate) fn start_delay_timers(
-    log: Res<TransitionLog>,
+    q_newly_active: Query<Entity, Added<Active>>,
     q_transitions: Query<&Transitions>,
     q_always: Query<(), With<AlwaysEdge>>,
     q_delay: Query<&Delay>,
     mut commands: Commands,
 ) {
-    for (_machine, state) in log.all_entered() {
+    for state in &q_newly_active {
         let Ok(transitions) = q_transitions.get(state) else {
             continue;
         };
@@ -31,12 +31,12 @@ pub(crate) fn start_delay_timers(
 /// Cancel timers for edges whose source state was exited.
 /// Runs in [`GearboxPhase::ExitPhase`](crate::GearboxPhase::ExitPhase).
 pub(crate) fn cancel_delay_timers(
-    log: Res<TransitionLog>,
+    mut removed: RemovedComponents<Active>,
     q_transitions: Query<&Transitions>,
     q_delay: Query<(), With<Delay>>,
     mut commands: Commands,
 ) {
-    for (_machine, state) in log.all_exited() {
+    for state in removed.read() {
         let Ok(transitions) = q_transitions.get(state) else {
             continue;
         };
@@ -59,7 +59,7 @@ pub(crate) fn tick_delay_timers(
     q_guards: Query<&Guards>,
     q_target: Query<&Target>,
     q_substate_of: Query<&SubstateOf>,
-    q_machine: Query<&Machine>,
+    q_machine: Query<&StateMachine>,
     mut writer: MessageWriter<TransitionMessage>,
 ) {
     for (source, transitions) in &q_transitions {

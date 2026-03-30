@@ -54,34 +54,31 @@ pub trait Repeatable: GearboxMessage + Send + Sync + 'static {
     fn repeat_tick(entity: Entity) -> Self;
 }
 
-/// System that reads FrameTransitionLog and fires repeater ticks.
-/// Replaces the old `On<EnterState>` observer.
-pub fn repeater_system<E: Repeatable>(
-    frame_log: Res<FrameTransitionLog>,
-    mut q_repeater: Query<&mut Repeater>,
-    q_substate_of: Query<&SubstateOf>,
-    mut writer_e: MessageWriter<E>,
-    mut writer_complete: MessageWriter<OnComplete>,
+/// Resets repeater counters when a state with a Repeater is re-entered.
+/// Runs before the tick system so a fresh entry starts from the initial count.
+pub fn reset_repeater_on_entry(
+    mut q_newly_active: Query<&mut Repeater, Added<Active>>,
 ) {
-    for (_machine, state) in frame_log.all_entered() {
-        let Ok(mut repeater) = q_repeater.get_mut(state) else {
-            continue;
-        };
-        let root = q_substate_of.root_ancestor(state);
-
-        if repeater.remaining > 0 {
-            writer_e.write(E::repeat_tick(root));
-            repeater.remaining -= 1;
-        } else {
-            writer_complete.write(OnComplete::new(root));
-        }
+    for mut repeater in q_newly_active.iter_mut() {
+        repeater.remaining = repeater.initial;
     }
 }
 
-// TODO: The original reset_repeater was an On<Reset> observer that only fired
-// when a ResetEdge explicitly reset the subtree. For now, repeater reset is
-// disabled until we have a proper Reset mechanism in the schedule version.
-// The repeater counter persists across the machine's lifetime.
+/// Fires repeater ticks when states with Repeater are entered.
+pub fn repeater_system<E: Repeatable>(
+    mut q_newly_active: Query<(Entity, &Active, &mut Repeater), Added<Active>>,
+    mut writer_e: MessageWriter<E>,
+    mut writer_complete: MessageWriter<OnComplete>,
+) {
+    for (_state, active, mut repeater) in q_newly_active.iter_mut() {
+        if repeater.remaining > 0 {
+            writer_e.write(E::repeat_tick(active.machine));
+            repeater.remaining -= 1;
+        } else {
+            writer_complete.write(OnComplete::new(active.machine));
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // template_repeater builder

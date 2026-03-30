@@ -22,7 +22,8 @@ impl Plugin for DieselPaePlugin {
         app.add_systems(
             Update,
             (
-                pae_enter_exit_system.after(GearboxSet),
+                pae_exit_system.after(GearboxSet),
+                pae_enter_system.after(GearboxSet),
                 stats_change_system,
                 active_effects_watcher_system,
             ),
@@ -33,63 +34,42 @@ impl Plugin for DieselPaePlugin {
 }
 
 // ---------------------------------------------------------------------------
-// State enter/exit system (replaces On<EnterState>/On<ExitState> observers)
+// State enter/exit systems (use Active component change detection)
 // ---------------------------------------------------------------------------
 
-fn pae_enter_exit_system(
-    frame_log: Res<FrameTransitionLog>,
-    q_applied_mods: Query<&AppliedModifiers>,
+fn pae_exit_system(
+    mut removed: RemovedComponents<Active>,
+    q_active_state: Query<(), With<StateComponent<ActiveState>>>,
     q_activated_mods: Query<&ActivatedModifiers>,
     q_effect_target: Query<&EffectTarget>,
+    q_substate_of: Query<&SubstateOf>,
     mut attributes: AttributesMut,
-    mut commands: Commands,
 ) {
-    // Process exits first (order matters for modifier removal)
-    for (machine, state) in frame_log.all_exited() {
-        // on_exit_active_state: remove activated modifiers
-        if q_activated_mods.contains(state) {
-            // The state entity itself has ActiveState, but the machine has the modifiers
-            if let Ok((effect_target, activated_modifiers)) =
-                q_effect_target.get(machine).and_then(|et| {
-                    q_activated_mods.get(machine).map(|am| (et, am))
-                })
-            {
+    for entity in removed.read() {
+        // Only act when exiting the ActiveState, not any other PAE state
+        if !q_active_state.contains(entity) {
+            continue;
+        }
+        let machine = q_substate_of.root_ancestor(entity);
+        if let Ok(effect_target) = q_effect_target.get(machine) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(machine) {
                 activated_modifiers.remove(effect_target.0, &mut attributes);
             }
         }
     }
+}
 
-    // Process entries
-    for (machine, state) in frame_log.all_entered() {
-        let Ok(effect_target) = q_effect_target.get(machine) else {
-            continue;
-        };
-        let target_entity = effect_target.0;
-
-        // Determine which state was entered by checking state components.
-        // We look at the machine for the modifiers, not the state entity.
-
-        // on_enter_applied_state
-        if let Ok(applied_modifiers) = q_applied_mods.get(machine) {
-            // Check if the entered state has AppliedState by seeing if the
-            // machine now has the StateComponent<AppliedState>.
-            // Since StateComponent auto-inserts on the machine, we check there.
-            // For now, we apply on every entry and let idempotency handle it.
-            // TODO: Check if the specific state that was entered is the applied state.
-        }
-
-        // on_enter_active_state
-        if let Ok(activated_modifiers) = q_activated_mods.get(machine) {
-            activated_modifiers.apply(target_entity, &mut attributes);
-        }
-
-        // on_enter_unapplied_state: remove applied modifiers and EffectTarget
-        // This is tricky - we need to know if the entered state is specifically
-        // the unapplied state. With StateComponent, the machine will have
-        // UnappliedState inserted. Check for that.
-        if let Ok(applied_modifiers) = q_applied_mods.get(machine) {
-            // Only remove if we're entering unapplied (machine has UnappliedState)
-            // This will be handled by the StateComponent system inserting UnappliedState
+fn pae_enter_system(
+    q_newly_active: Query<&Active, (Added<Active>, With<StateComponent<ActiveState>>)>,
+    q_activated_mods: Query<&ActivatedModifiers>,
+    q_effect_target: Query<&EffectTarget>,
+    mut attributes: AttributesMut,
+) {
+    for active in &q_newly_active {
+        if let Ok(effect_target) = q_effect_target.get(active.machine) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(active.machine) {
+                activated_modifiers.apply(effect_target.0, &mut attributes);
+            }
         }
     }
 }

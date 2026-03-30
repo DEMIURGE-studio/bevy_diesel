@@ -33,7 +33,7 @@ pub mod transitions {
 /// Compatibility prelude matching core's `prelude` module.
 pub mod prelude {
     pub use crate::components::{
-        SubstateOf, Substates, Machine, InitialState,
+        SubstateOf, Substates, StateMachine, InitialState,
         Source, Target, Transitions, AlwaysEdge, EdgeKind,
         Guards, Delay,
         Guard, GuardProvider,
@@ -55,9 +55,10 @@ pub mod prelude {
     };
     pub use crate::{GearboxSchedule, GearboxPhase, GearboxSet};
     pub use crate::resolve::{
-        TransitionMessage, TransitionLog, TransitionRecord,
-        FrameTransitionLog,
+        TransitionMessage,
+        EnterState, ExitState,
     };
+    pub use crate::components::Active;
     pub use crate::registration::RegistrationAppExt;
     pub use crate::parameters::{
         FloatParam, IntParam, BoolParam,
@@ -69,7 +70,6 @@ pub mod prelude {
     pub use crate::NoEvent;
 
     // Compat aliases
-    pub use crate::components::Machine as StateMachine;
     pub use crate::messages::MessageEdge as EventEdge;
     pub use crate::messages::GearboxMessage as TransitionEvent;
     pub use crate::messages::MessageValidator as EventValidator;
@@ -77,12 +77,8 @@ pub mod prelude {
 
 /// Compat: `SimpleTransition` doesn't exist as a derive in the schedule
 /// version. Re-export the trait alias so `use bevy_gearbox::SimpleTransition`
-/// resolves. Users will need to switch from `#[derive(SimpleTransition)]` to
-/// a manual `impl GearboxMessage`.
+/// resolves. Users should switch to `#[gearbox_message]` attribute macro.
 pub use crate::messages::GearboxMessage as SimpleTransition;
-
-/// Compat: core called it `StateMachine`, schedule calls it `Machine`.
-pub use crate::components::Machine as StateMachine;
 
 /// Compat alias for the plugin.
 pub use crate::GearboxSchedulePlugin as GearboxPlugin;

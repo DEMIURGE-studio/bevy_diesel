@@ -50,14 +50,13 @@ pub mod prelude {
     pub use crate::spawn::{
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
         SpawnConfig, TemplateRegistry, spawn_observer,
-        on_spawn_invoker, on_spawn_origin, on_spawn_target,
     };
     pub use crate::filters::{
         CollisionFilter, Collides, NumberType, limit_count, sort_by_distance,
     };
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
-    pub use crate::gearbox::repeater::{OnComplete, Repeater, template_repeater};
+    pub use crate::gearbox::repeater::{OnComplete, Repeater, template_repeater, reset_repeater_on_entry};
     pub use crate::gearbox::templates::apply_sub_effect;
     pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
@@ -65,7 +64,7 @@ pub mod prelude {
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
         SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
         GuardProvider, WriteMessageExt,
-        GearboxSet, FrameTransitionLog,
+        GearboxSet, EnterState, ExitState, Active,
     };
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,

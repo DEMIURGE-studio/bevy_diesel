@@ -204,21 +204,7 @@ spawn_event!(OnSpawnTarget);
 spawn_event!(OnSpawnInvoker);
 
 // ---------------------------------------------------------------------------
-// Spawn event observer helpers
-// ---------------------------------------------------------------------------
-
-// TODO: These were observer-based forwarders (On<OnSpawnOrigin<P>> → GoOff).
-// In the schedule version, the TransitionEvent::to_entry_event mechanism is
-// gone. These need to be replaced by a system that reads FrameTransitionLog
-// and fires GoOff when a spawn-transition state is entered.
-// For now they are no-op stubs to keep downstream code compiling.
-
-pub fn on_spawn_origin<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>() {}
-pub fn on_spawn_target<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>() {}
-pub fn on_spawn_invoker<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>() {}
-
-// ---------------------------------------------------------------------------
-// Generic spawn observer
+// Generic spawn system
 // ---------------------------------------------------------------------------
 
 pub fn spawn_system<B: SpatialBackend>(

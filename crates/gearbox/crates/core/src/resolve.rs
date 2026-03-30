@@ -6,46 +6,6 @@ use crate::helpers::*;
 use crate::history::*;
 
 // ---------------------------------------------------------------------------
-// TransitionRecord / TransitionLog
-// ---------------------------------------------------------------------------
-
-/// Record of a single state transition resolved this iteration.
-#[derive(Debug, Clone)]
-pub struct TransitionRecord {
-    pub machine: Entity,
-    pub exited: Vec<Entity>,
-    pub entered: Vec<Entity>,
-}
-
-/// Per-iteration log of all transitions resolved by [`resolve_transitions`].
-/// Cleared at the start of each schedule iteration.
-///
-/// User systems in [`GearboxPhase::ExitPhase`](crate::GearboxPhase::ExitPhase) and
-/// [`GearboxPhase::EntryPhase`](crate::GearboxPhase::EntryPhase) read this to know which states changed.
-#[derive(Resource, Default, Debug)]
-pub struct TransitionLog {
-    pub transitions: Vec<TransitionRecord>,
-}
-
-impl TransitionLog {
-    /// All states exited this iteration across all machines.
-    pub fn all_exited(&self) -> impl Iterator<Item = (Entity, Entity)> + '_ {
-        self.transitions.iter().flat_map(|r| {
-            let machine = r.machine;
-            r.exited.iter().map(move |&state| (machine, state))
-        })
-    }
-
-    /// All states entered this iteration across all machines.
-    pub fn all_entered(&self) -> impl Iterator<Item = (Entity, Entity)> + '_ {
-        self.transitions.iter().flat_map(|r| {
-            let machine = r.machine;
-            r.entered.iter().map(move |&state| (machine, state))
-        })
-    }
-}
-
-// ---------------------------------------------------------------------------
 // TransitionMessage / PendingCount
 // ---------------------------------------------------------------------------
 
@@ -66,34 +26,55 @@ pub struct TransitionMessage {
 pub(crate) struct PendingCount(pub(crate) usize);
 
 // ---------------------------------------------------------------------------
-// FrameTransitionLog
+// EnterState / ExitState entity events
 // ---------------------------------------------------------------------------
 
-/// Accumulated log of ALL transitions across ALL iterations in a single frame.
-/// Unlike [`TransitionLog`] (which is per-iteration), this persists until the
-/// next frame. Systems that need to react to state changes (the schedule-era
-/// replacement for `On<EnterState>` / `On<ExitState>` observers) should read
-/// this in [`Update`] after [`GearboxSet`](crate::GearboxSet).
-#[derive(Resource, Default, Debug)]
-pub struct FrameTransitionLog {
-    pub transitions: Vec<TransitionRecord>,
+/// Triggered on a state entity after the schedule converges.
+/// Use `On<EnterState>` observers on state entities to react.
+///
+/// For schedule-phase or Update-phase systems, prefer querying
+/// [`Added<Active>`](crate::components::Active) instead.
+#[derive(EntityEvent, Clone, Debug)]
+pub struct EnterState {
+    #[event_target]
+    pub state: Entity,
+    pub machine: Entity,
 }
 
-impl FrameTransitionLog {
-    /// All states exited this frame across all machines.
-    pub fn all_exited(&self) -> impl Iterator<Item = (Entity, Entity)> + '_ {
-        self.transitions.iter().flat_map(|r| {
-            let machine = r.machine;
-            r.exited.iter().map(move |&state| (machine, state))
-        })
-    }
+/// Triggered on a state entity after the schedule converges.
+/// Use `On<ExitState>` observers on state entities to react.
+///
+/// For schedule-phase or Update-phase systems, prefer querying
+/// [`Active`](crate::components::Active) with `RemovedComponents`.
+#[derive(EntityEvent, Clone, Debug)]
+pub struct ExitState {
+    #[event_target]
+    pub state: Entity,
+    pub machine: Entity,
+}
 
-    /// All states entered this frame across all machines.
-    pub fn all_entered(&self) -> impl Iterator<Item = (Entity, Entity)> + '_ {
-        self.transitions.iter().flat_map(|r| {
-            let machine = r.machine;
-            r.entered.iter().map(move |&state| (machine, state))
-        })
+/// Flush system: triggers [`EnterState`] / [`ExitState`] as entity events
+/// from the [`Active`] component changes made during the schedule loop.
+/// Runs in [`Update`] after the schedule loop.
+pub(crate) fn flush_state_events(
+    q_newly_active: Query<(Entity, &Active), Added<Active>>,
+    mut removed: RemovedComponents<Active>,
+    q_substate_of: Query<&SubstateOf>,
+    q_machine: Query<(), With<StateMachine>>,
+    mut commands: Commands,
+) {
+    // Fire ExitState for states that lost Active this frame
+    for entity in removed.read() {
+        // Walk up SubstateOf to find the machine root
+        let machine = q_substate_of.root_ancestor(entity);
+        // Only fire if the root is actually a state machine
+        if q_machine.contains(machine) {
+            commands.trigger(ExitState { state: entity, machine });
+        }
+    }
+    // Fire EnterState for states that gained Active this frame
+    for (state, active) in &q_newly_active {
+        commands.trigger(EnterState { state, machine: active.machine });
     }
 }
 
@@ -101,26 +82,11 @@ impl FrameTransitionLog {
 // Systems (run inside GearboxSchedule)
 // ---------------------------------------------------------------------------
 
-/// Accumulate each iteration's TransitionLog into the FrameTransitionLog.
-/// Runs at the end of each schedule iteration (in [`GearboxPhase::EdgeCheckPhase`](crate::GearboxPhase::EdgeCheckPhase)).
-pub(crate) fn accumulate_frame_log(log: Res<TransitionLog>, mut frame_log: ResMut<FrameTransitionLog>) {
-    frame_log.transitions.extend(log.transitions.iter().cloned());
-}
-
-/// Clear the frame log at the start of each frame, before the gearbox loop runs.
-pub(crate) fn clear_frame_log(mut frame_log: ResMut<FrameTransitionLog>) {
-    frame_log.transitions.clear();
-}
-
-pub(crate) fn clear_transition_log(mut log: ResMut<TransitionLog>) {
-    log.transitions.clear();
-}
-
 /// Resolve all pending transition messages: compute exits, entries, update
-/// Machine, save history, handle ResetEdge, and populate TransitionLog.
+/// StateMachine, save history, handle ResetEdge, and insert/remove [`Active`].
 pub(crate) fn resolve_transitions(
     mut reader: MessageReader<TransitionMessage>,
-    mut q_machine: Query<&mut Machine>,
+    mut q_machine: Query<&mut StateMachine>,
     q_substates: Query<&Substates>,
     q_substate_of: Query<&SubstateOf>,
     q_initial: Query<&InitialState>,
@@ -129,7 +95,6 @@ pub(crate) fn resolve_transitions(
     q_edge_kind: Query<&EdgeKind>,
     q_reset_edge: Query<&ResetEdge>,
     mut commands: Commands,
-    mut log: ResMut<TransitionLog>,
 ) {
     for msg in reader.read() {
         let Ok(mut machine) = q_machine.get_mut(msg.machine) else {
@@ -145,17 +110,15 @@ pub(crate) fn resolve_transitions(
                 &q_history,
                 &q_history_state,
             );
-            let entered: Vec<Entity> = leaves.iter().copied().collect();
             machine.active_leaves.extend(&leaves);
             machine.active =
                 compute_active_from_leaves(&machine.active_leaves, &q_substate_of);
             machine.active.insert(msg.machine);
 
-            log.transitions.push(TransitionRecord {
-                machine: msg.machine,
-                exited: Vec::new(),
-                entered,
-            });
+            // Insert Active on all newly active states
+            for &state in &machine.active {
+                commands.entity(state).insert(Active { machine: msg.machine });
+            }
             continue;
         }
 
@@ -300,10 +263,10 @@ pub(crate) fn resolve_transitions(
             &q_history,
             &q_history_state,
         );
-        let entered: Vec<Entity> = new_leaves.iter().copied().collect();
         machine.active_leaves.extend(new_leaves);
 
         // Recompute active set.
+        let old_active = std::mem::take(&mut machine.active);
         machine.active =
             compute_active_from_leaves(&machine.active_leaves, &q_substate_of);
         machine.active.insert(msg.machine);
@@ -316,11 +279,17 @@ pub(crate) fn resolve_transitions(
             }
         }
 
-        log.transitions.push(TransitionRecord {
-            machine: msg.machine,
-            exited: exited_all,
-            entered,
-        });
+        // Remove Active from exited states
+        for &state in &exited_all {
+            commands.entity(state).remove::<Active>();
+        }
+
+        // Insert Active on newly entered states (states in new active but not in old)
+        for &state in &machine.active {
+            if !old_active.contains(&state) {
+                commands.entity(state).insert(Active { machine: msg.machine });
+            }
+        }
     }
 }
 
@@ -328,7 +297,7 @@ pub(crate) fn resolve_transitions(
 pub(crate) fn check_always_edges(
     mut writer: MessageWriter<TransitionMessage>,
     mut pending: ResMut<PendingCount>,
-    q_machine: Query<(Entity, &Machine)>,
+    q_machine: Query<(Entity, &StateMachine)>,
     q_transitions: Query<&Transitions>,
     q_always: Query<(), With<AlwaysEdge>>,
     q_target: Query<&Target>,

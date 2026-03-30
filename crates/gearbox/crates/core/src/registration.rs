@@ -157,6 +157,7 @@ impl RegistrationAppExt for App {
         for i in inventory::iter::<IntParamBindingInstaller> { (i.install)(self); }
         for i in inventory::iter::<BoolParamBindingInstaller> { (i.install)(self); }
         for i in inventory::iter::<StateBridgeInstaller> { (i.install)(self); }
+        for i in inventory::iter::<SideEffectInstaller> { (i.install)(self); }
     }
 }
 
@@ -172,14 +173,11 @@ pub fn gearbox_auto_register_plugin(app: &mut App) {
 /// Sync gearbox state into Bevy's `NextState<S>` when a state with component
 /// `S` is entered. Runs in [`Update`] after [`GearboxSet`].
 pub fn bridge_to_bevy_state<S: States + bevy::state::state::FreelyMutableState + Component + Clone + 'static>(
-    log: Res<crate::resolve::TransitionLog>,
-    q_state: Query<&S>,
+    q_entered: Query<(Entity, &S), Added<crate::components::Active>>,
     mut next: ResMut<NextState<S>>,
 ) {
-    for (_machine, state) in log.all_entered() {
-        if let Ok(s) = q_state.get(state) {
-            next.set(s.clone());
-        }
+    for (_entity, s) in &q_entered {
+        next.set(s.clone());
     }
 }
 
@@ -214,6 +212,49 @@ inventory::collect!(BoolParamBindingInstaller);
 pub struct StateBridgeInstaller { pub install: fn(&mut App) }
 inventory::collect!(StateBridgeInstaller);
 
+pub struct SideEffectInstaller { pub install: fn(&mut App) }
+inventory::collect!(SideEffectInstaller);
+
+// ---------------------------------------------------------------------------
+// Standalone register_* wrappers (used as fn pointers by inventory macros)
+// ---------------------------------------------------------------------------
+
+pub fn register_transition<M: GearboxMessage>(app: &mut App) {
+    app.register_transition::<M>();
+}
+
+pub fn register_state_component<T: Component<Mutability = Mutable> + Clone + 'static>(app: &mut App) {
+    app.register_state_component::<T>();
+}
+
+pub fn register_float_param<P: Send + Sync + 'static>(app: &mut App) {
+    app.register_float_param::<P>();
+}
+
+pub fn register_int_param<P: Send + Sync + 'static>(app: &mut App) {
+    app.register_int_param::<P>();
+}
+
+pub fn register_bool_param<P: Send + Sync + 'static>(app: &mut App) {
+    app.register_bool_param::<P>();
+}
+
+pub fn register_float_param_binding<T: Component + 'static, P: FloatParamBinding<T> + Send + Sync + 'static>(app: &mut App) {
+    app.register_float_param_binding::<T, P>();
+}
+
+pub fn register_int_param_binding<T: Component + 'static, P: IntParamBinding<T> + Send + Sync + 'static>(app: &mut App) {
+    app.register_int_param_binding::<T, P>();
+}
+
+pub fn register_state_bridge<S: States + bevy::state::state::FreelyMutableState + Default + Component + Clone + 'static>(app: &mut App) {
+    app.register_state_bridge::<S>();
+}
+
+pub fn register_side_effect<M: GearboxMessage, S: SideEffect<M>>(app: &mut App) {
+    app.register_side_effect::<M, S>();
+}
+
 // ---------------------------------------------------------------------------
 // DeferEvent
 // ---------------------------------------------------------------------------
@@ -244,11 +285,11 @@ impl<M: GearboxMessage> DeferEvent<M> {
 /// Replay deferred messages when their host state exits.
 /// Runs in [`Update`] after [`GearboxSet`] — replayed messages are picked up next frame.
 pub fn replay_deferred_messages<M: GearboxMessage>(
-    log: Res<crate::resolve::TransitionLog>,
+    mut removed: RemovedComponents<crate::components::Active>,
     mut q_defer: Query<&mut DeferEvent<M>>,
     mut writer: MessageWriter<M>,
 ) {
-    for (_machine, state) in log.all_exited() {
+    for state in removed.read() {
         if let Ok(mut defer) = q_defer.get_mut(state) {
             if let Some(msg) = defer.take_deferred() {
                 writer.write(msg);

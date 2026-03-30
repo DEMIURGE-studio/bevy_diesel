@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_gearbox::{AcceptAll, GearboxMessage, FrameTransitionLog, Machine, WriteMessageExt};
+use bevy_gearbox::{AcceptAll, Active, GearboxMessage};
 
 /// Ability marker. Requires `InvokeStatus`.
 #[derive(Component, Default, Reflect)]
@@ -31,15 +31,12 @@ impl GearboxMessage for InvocationComplete {
 }
 
 /// Re-triggers invocation on state entry if still held (`TryInvoke`).
-/// Replaces the old `On<EnterState>` observer.
 pub fn check_should_reinvoke_ability(
-    frame_log: Res<FrameTransitionLog>,
-    q_machine: Query<Entity, With<Machine>>,
+    q_newly_active: Query<&Active, Added<Active>>,
     mut q_ability: Query<&mut InvokeStatus>,
 ) {
-    for (machine, _state) in frame_log.all_entered() {
-        // The old observer used enter_state.state_machine to find the ability entity
-        if let Ok(mut invoke_status) = q_ability.get_mut(machine) {
+    for active in &q_newly_active {
+        if let Ok(mut invoke_status) = q_ability.get_mut(active.machine) {
             if *invoke_status == InvokeStatus::TryInvoke {
                 invoke_status.set_changed();
             }
