@@ -149,12 +149,11 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
 
     commands.entity(entity).with_children(|parent| {
         let flying = parent
-            .spawn_substate(entity, (Name::new("Flying"), InvokedBy(entity)))
+            .spawn_diesel_substate(entity, Name::new("Flying"))
             .id();
 
         parent.spawn_subeffect(
             flying,
-            entity,
             (
                 Name::new("SpawnExplosion"),
                 SpawnConfig::at_passed("explosion"),
@@ -164,14 +163,12 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
         let life_targeting = parent
             .spawn_subeffect(
                 flying,
-                entity,
                 (Name::new("DecrementLife"), TargetMutator::root()),
             )
             .id();
 
         parent.spawn_subeffect(
             life_targeting,
-            entity,
             (
                 Name::new("DecrementLifeInstant"),
                 bevy_diesel::bevy_gauge::instant! { "ProjectileLife" -= 1.0 },
@@ -179,7 +176,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
         );
 
         let done = parent
-            .spawn_substate(
+            .spawn_diesel_substate(
                 entity,
                 (Name::new("Done"), StateComponent(DelayedDespawn::now())),
             )
@@ -221,12 +218,11 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
-        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
+        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
+        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
 
         parent.spawn_subeffect(
             invoke,
-            entity,
             (
                 Name::new("SpawnProjectile"),
                 SpawnConfig::at_invoker("explosive_projectile")
@@ -258,19 +254,18 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
     commands.entity(entity).with_children(|parent| {
         // Repeater: 3 volleys, 500ms between each
         let repeater = parent
-            .spawn_substate(entity, (Name::new("Repeater"), Repeater::new(3)))
+            .spawn_diesel_substate(entity, (Name::new("Repeater"), Repeater::new(3)))
             .id();
 
         let idle = parent
-            .spawn_substate(repeater, Name::new("Idle"))
+            .spawn_diesel_substate(repeater, Name::new("Idle"))
             .id();
 
         let spawn_wave = parent
-            .spawn_substate(
+            .spawn_diesel_substate(
                 repeater,
                 (
                     Name::new("SpawnWave"),
-                    InvokedBy(entity),
                     SpawnConfig::root("explosive_projectile").with_gatherer(
                         AvianGatherer::Circle {
                             radius: 4.0,
@@ -290,7 +285,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
 
         // When repeater exhausts, OnComplete transitions to Done
         let done = parent
-            .spawn_substate(
+            .spawn_diesel_substate(
                 entity,
                 (Name::new("Done"), StateComponent(DelayedDespawn::now())),
             )
@@ -323,12 +318,11 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
-        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
+        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
+        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
 
         parent.spawn_subeffect(
             invoke,
-            entity,
             (
                 Name::new("SpawnZone"),
                 SpawnConfig::at_passed("firestorm_zone")

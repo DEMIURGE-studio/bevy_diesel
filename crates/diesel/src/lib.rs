@@ -71,7 +71,7 @@ pub mod prelude {
         RegisterPropagationTarget, PropagationRegistrar,
         register_propagation_for, propagate_event,
     };
-    pub use crate::subeffects::SpawnSubEffect;
+    pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};
     pub use crate::submit_propagation_for;
     pub use crate::despawn::{QueueDespawn, DelayedDespawn};
     pub use crate::invoke::{Ability, InvokeStatus, InvocationComplete, check_should_reinvoke_ability};

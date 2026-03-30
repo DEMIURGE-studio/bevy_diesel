@@ -21,19 +21,27 @@ impl WriteMessageExt for Commands<'_, '_> {
 
 /// Extension trait for spawning substates with less boilerplate.
 pub trait SpawnSubstate {
-    type Out<'a> where Self: 'a;
+    type Out<'a>
+    where
+        Self: 'a;
     fn spawn_substate<B: Bundle>(&mut self, parent: Entity, bundle: B) -> Self::Out<'_>;
 }
 
 impl SpawnSubstate for Commands<'_, '_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
     fn spawn_substate<B: Bundle>(&mut self, parent: Entity, bundle: B) -> EntityCommands<'_> {
         self.spawn((SubstateOf(parent), bundle))
     }
 }
 
 impl SpawnSubstate for ChildSpawnerCommands<'_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
     fn spawn_substate<B: Bundle>(&mut self, parent: Entity, bundle: B) -> EntityCommands<'_> {
         self.spawn((SubstateOf(parent), bundle))
     }
@@ -41,15 +49,28 @@ impl SpawnSubstate for ChildSpawnerCommands<'_> {
 
 /// Extension trait for spawning transitions.
 pub trait SpawnTransition {
-    type Out<'a> where Self: 'a;
-    fn spawn_transition<M: GearboxMessage>(&mut self, source: Entity, target: Entity) -> Self::Out<'_>;
+    type Out<'a>
+    where
+        Self: 'a;
+    fn spawn_transition<M: GearboxMessage>(
+        &mut self,
+        source: Entity,
+        target: Entity,
+    ) -> Self::Out<'_>;
     fn spawn_transition_always(&mut self, source: Entity, target: Entity) -> Self::Out<'_>;
 }
 
 impl SpawnTransition for Commands<'_, '_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
 
-    fn spawn_transition<M: GearboxMessage>(&mut self, source: Entity, target: Entity) -> EntityCommands<'_> {
+    fn spawn_transition<M: GearboxMessage>(
+        &mut self,
+        source: Entity,
+        target: Entity,
+    ) -> EntityCommands<'_> {
         self.spawn((Source(source), Target(target), MessageEdge::<M>::default()))
     }
 
@@ -59,9 +80,16 @@ impl SpawnTransition for Commands<'_, '_> {
 }
 
 impl SpawnTransition for ChildSpawnerCommands<'_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
 
-    fn spawn_transition<M: GearboxMessage>(&mut self, source: Entity, target: Entity) -> EntityCommands<'_> {
+    fn spawn_transition<M: GearboxMessage>(
+        &mut self,
+        source: Entity,
+        target: Entity,
+    ) -> EntityCommands<'_> {
         self.spawn((Source(source), Target(target), MessageEdge::<M>::default()))
     }
 
@@ -78,34 +106,47 @@ pub struct TransitionBuilder {
 
 impl TransitionBuilder {
     fn new() -> Self {
-        Self { guards: Vec::new(), deferred: Vec::new() }
+        Self {
+            guards: Vec::new(),
+            deferred: Vec::new(),
+        }
     }
 
     pub fn init_guard<G: GuardProvider>(&mut self, guard: G) -> &mut Self {
         self.guards.push(G::guard_name().to_string());
-        self.deferred.push(Box::new(move |ec| { ec.insert(guard); }));
+        self.deferred.push(Box::new(move |ec| {
+            ec.insert(guard);
+        }));
         self
     }
 
     pub fn insert<B: Bundle>(&mut self, bundle: B) -> &mut Self {
-        self.deferred.push(Box::new(move |ec| { ec.insert(bundle); }));
+        self.deferred.push(Box::new(move |ec| {
+            ec.insert(bundle);
+        }));
         self
     }
 
     pub fn with_delay(&mut self, duration: Duration) -> &mut Self {
-        self.deferred.push(Box::new(move |ec| { ec.insert(Delay { duration }); }));
+        self.deferred.push(Box::new(move |ec| {
+            ec.insert(Delay { duration });
+        }));
         self
     }
 
     pub fn with_name(&mut self, name: impl Into<String> + Send + Sync + 'static) -> &mut Self {
-        self.deferred.push(Box::new(move |ec| { ec.insert(Name::new(name.into())); }));
+        self.deferred.push(Box::new(move |ec| {
+            ec.insert(Name::new(name.into()));
+        }));
         self
     }
 }
 
 /// Extension trait for building guarded always-transitions.
 pub trait BuildTransition {
-    type Out<'a> where Self: 'a;
+    type Out<'a>
+    where
+        Self: 'a;
     fn build_transition_always(
         &mut self,
         source: Entity,
@@ -115,7 +156,10 @@ pub trait BuildTransition {
 }
 
 impl BuildTransition for Commands<'_, '_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
 
     fn build_transition_always(
         &mut self,
@@ -128,7 +172,12 @@ impl BuildTransition for Commands<'_, '_> {
         let mut ec = if builder.guards.is_empty() {
             self.spawn((Source(source), Target(target), AlwaysEdge))
         } else {
-            self.spawn((Source(source), Target(target), AlwaysEdge, Guards::init(builder.guards)))
+            self.spawn((
+                Source(source),
+                Target(target),
+                AlwaysEdge,
+                Guards::init(builder.guards),
+            ))
         };
         for f in builder.deferred {
             f(&mut ec);
@@ -138,7 +187,10 @@ impl BuildTransition for Commands<'_, '_> {
 }
 
 impl BuildTransition for ChildSpawnerCommands<'_> {
-    type Out<'a> = EntityCommands<'a> where Self: 'a;
+    type Out<'a>
+        = EntityCommands<'a>
+    where
+        Self: 'a;
 
     fn build_transition_always(
         &mut self,
@@ -151,7 +203,12 @@ impl BuildTransition for ChildSpawnerCommands<'_> {
         let mut ec = if builder.guards.is_empty() {
             self.spawn((Source(source), Target(target), AlwaysEdge))
         } else {
-            self.spawn((Source(source), Target(target), AlwaysEdge, Guards::init(builder.guards)))
+            self.spawn((
+                Source(source),
+                Target(target),
+                AlwaysEdge,
+                Guards::init(builder.guards),
+            ))
         };
         for f in builder.deferred {
             f(&mut ec);
