@@ -10,11 +10,11 @@ keywords = ["bevy", "avian", "physics", "gamedev"]
 categories = ["game-development", "game-engines"]
 
 [dependencies]
-bevy_diesel = { path = "../../crates/diesel" }
+bevy_diesel = { path = "../.." }
 bevy = "0.18.0"
 avian3d = "0.5"
 rand = "0.9"
-bevy_gearbox = { path = "../../crates/gearbox" }
+bevy_gearbox = { path = "../../../bevy_gearbox" }
 
 [features]
 default = []

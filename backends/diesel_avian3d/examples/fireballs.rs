@@ -227,7 +227,7 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
                 Name::new("SpawnProjectile"),
                 SpawnConfig::invoker("explosive_projectile")
                     .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
-                    .with_target_generator(TargetGenerator::invoker_target()),
+                    .with_target_generator(TargetGenerator::at_invoker_target()),
             ),
         );
 

@@ -1,15 +1,17 @@
-[workspace]
-members = ["backends/diesel_avian2d",
-  "backends/diesel_avian3d", "backends/diesel_grid2d", "backends/diesel_monster",
-  "crates/diesel",
-  "crates/gauge/core",
-  "crates/gauge/macros",
-  "crates/gearbox",
-  "crates/gearbox/crates/core",
-  "crates/gearbox/crates/editor",
-  "crates/gearbox/crates/legacy",
-  "crates/gearbox/crates/legacy_macros",
-  "crates/gearbox/crates/macros",
-  "crates/gearbox/crates/protocol",
-]
-resolver = "3"
+[package]
+name = "bevy_diesel"
+version = "0.2.0"
+edition = "2024"
+description = "A generic ability engine framework for Bevy"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_diesel"
+homepage = "https://github.com/DEMIURGE-studio/bevy_diesel"
+keywords = ["bevy", "abilities", "gamedev", "ecs"]
+categories = ["game-development", "game-engines"]
+
+[dependencies]
+bevy = "0.18.0"
+rand = "0.9"
+inventory = "0.3"
+bevy_gauge = { path = "../bevy_gauge", features = ["gearbox"] }
+bevy_gearbox = { path = "../bevy_gearbox" }
