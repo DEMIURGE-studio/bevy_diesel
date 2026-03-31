@@ -5,7 +5,8 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 
-use bevy_gauge::prelude::AttributesMut;
+use bevy_gauge::prelude::{AttributeDerived, AttributesMut};
+use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
 use crate::effect::{GoOff, GoOffOrigin};
@@ -143,6 +144,61 @@ impl<B: SpatialBackend> SpawnConfig<B> {
     pub fn as_child_of_passed(mut self) -> Self {
         self.as_child_of = Some(TargetType::Passed);
         self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AttributeResolvable for SpawnConfig
+// ---------------------------------------------------------------------------
+
+impl<B: SpatialBackend> AttributeResolvable for SpawnConfig<B>
+where
+    B::Offset: AttributeResolvable,
+    B::Gatherer: AttributeResolvable,
+    B::Filter: AttributeResolvable,
+{
+    fn should_resolve(
+        &self,
+        prefix: &str,
+        attrs: &bevy_gauge::attributes::Attributes,
+    ) -> bool {
+        self.spawn_position_generator
+            .should_resolve(&format!("{prefix}.position"), attrs)
+            || self
+                .spawn_target_generator
+                .should_resolve(&format!("{prefix}.target"), attrs)
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &bevy_gauge::attributes::Attributes) {
+        self.spawn_position_generator
+            .resolve(&format!("{prefix}.position"), attrs);
+        self.spawn_target_generator
+            .resolve(&format!("{prefix}.target"), attrs);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AttributeDerived for SpawnConfig (bridges to AttributeResolvable)
+// ---------------------------------------------------------------------------
+
+impl<B: SpatialBackend> AttributeDerived for SpawnConfig<B>
+where
+    B::Offset: AttributeResolvable,
+    B::Gatherer: AttributeResolvable,
+    B::Filter: AttributeResolvable,
+{
+    fn should_update(
+        &self,
+        attrs: &bevy_gauge::attributes::Attributes,
+    ) -> bool {
+        self.should_resolve("SpawnConfig", attrs)
+    }
+
+    fn update_from_attributes(
+        &mut self,
+        attrs: &bevy_gauge::attributes::Attributes,
+    ) {
+        self.resolve("SpawnConfig", attrs);
     }
 }
 

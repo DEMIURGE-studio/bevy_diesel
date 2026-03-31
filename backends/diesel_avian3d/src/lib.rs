@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use rand::RngCore;
 
 use bevy_diesel::prelude::*;
+use bevy_diesel::bevy_gauge::prelude::AttributeResolvable;
+use bevy_diesel::bevy_gauge::attributes::Attributes;
 
 // Re-exports
 
@@ -91,7 +93,7 @@ impl SpatialBackend for AvianBackend {
         match gatherer {
             // Position generators - read embedded count, produce N points
             AvianGatherer::Sphere { radius, count } => {
-                let n = count.resolve(&mut ctx.rng);
+                let n = count.resolve_count(&mut ctx.rng);
                 (0..n)
                     .map(|_| {
                         let pos = origin + random_in_sphere(&mut ctx.rng, *radius);
@@ -100,7 +102,7 @@ impl SpatialBackend for AvianBackend {
                     .collect()
             }
             AvianGatherer::Circle { radius, count } => {
-                let n = count.resolve(&mut ctx.rng);
+                let n = count.resolve_count(&mut ctx.rng);
                 (0..n)
                     .map(|_| {
                         let v = random_in_circle(&mut ctx.rng, *radius);
@@ -113,7 +115,7 @@ impl SpatialBackend for AvianBackend {
                 half_extents,
                 count,
             } => {
-                let n = count.resolve(&mut ctx.rng);
+                let n = count.resolve_count(&mut ctx.rng);
                 (0..n)
                     .map(|_| {
                         let pos = origin
@@ -131,7 +133,7 @@ impl SpatialBackend for AvianBackend {
                 length,
                 count,
             } => {
-                let n = count.resolve(&mut ctx.rng);
+                let n = count.resolve_count(&mut ctx.rng);
                 let dir = direction.normalize_or_zero();
                 (0..n)
                     .map(|_| {
@@ -207,12 +209,40 @@ impl SpatialBackend for AvianBackend {
 // Vec3Offset
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Debug)]
+pub struct DirectionOffset {
+    pub direction: Dir3,
+    pub magnitude: f32,
+}
+
+impl DirectionOffset {
+    pub fn new(dir: Dir3, magnitude: f32) -> DirectionOffset {
+        DirectionOffset {
+            direction: dir,
+            magnitude,
+        }
+    }
+}
+
+impl AttributeResolvable for DirectionOffset {
+    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
+        self.magnitude.should_resolve(&format!("{prefix}.magnitude"), attrs)
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
+        self.magnitude.resolve(&format!("{prefix}.magnitude"), attrs);
+    }
+}
+
 /// Offset configuration for 3D space.
 #[derive(Clone, Debug)]
 pub enum Vec3Offset {
     None,
-    Fixed(Vec3),
-    RandomBetween(Vec3, Vec3),
+    Fixed(DirectionOffset),
+    RandomBetween {
+        min: DirectionOffset,
+        max: DirectionOffset,
+    },
     RandomInSphere(f32),
     RandomInCircle(f32),
 }
@@ -223,15 +253,52 @@ impl Default for Vec3Offset {
     }
 }
 
+impl AttributeResolvable for Vec3Offset {
+    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
+        match self {
+            Self::None => false,
+            Self::Fixed(offset) => offset.should_resolve(prefix, attrs),
+            Self::RandomBetween { min, max } => {
+                min.should_resolve(&format!("{prefix}.min"), attrs)
+                    || max.should_resolve(&format!("{prefix}.max"), attrs)
+            }
+            Self::RandomInSphere(radius) => {
+                radius.should_resolve(&format!("{prefix}.radius"), attrs)
+            }
+            Self::RandomInCircle(radius) => {
+                radius.should_resolve(&format!("{prefix}.radius"), attrs)
+            }
+        }
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
+        match self {
+            Self::None => {}
+            Self::Fixed(offset) => offset.resolve(prefix, attrs),
+            Self::RandomBetween { min, max } => {
+                min.resolve(&format!("{prefix}.min"), attrs);
+                max.resolve(&format!("{prefix}.max"), attrs);
+            }
+            Self::RandomInSphere(radius) => {
+                radius.resolve(&format!("{prefix}.radius"), attrs);
+            }
+            Self::RandomInCircle(radius) => {
+                radius.resolve(&format!("{prefix}.radius"), attrs);
+            }
+        }
+    }
+}
+
 fn apply_vec3_offset(offset: &Vec3Offset, rng: &mut dyn RngCore) -> Vec3 {
     match offset {
         Vec3Offset::None => Vec3::ZERO,
-        Vec3Offset::Fixed(v) => *v,
-        Vec3Offset::RandomBetween(min, max) => Vec3::new(
-            rand_f32_range(rng, min.x, max.x),
-            rand_f32_range(rng, min.y, max.y),
-            rand_f32_range(rng, min.z, max.z),
-        ),
+        Vec3Offset::Fixed(offset) => *offset.direction * offset.magnitude,
+        Vec3Offset::RandomBetween { min, max } => {
+            let t = rand_f32(rng);
+            let magnitude = min.magnitude + t * (max.magnitude - min.magnitude);
+            let dir = min.direction.slerp(max.direction, t);
+            *dir * magnitude
+        }
         Vec3Offset::RandomInSphere(radius) => random_in_sphere(rng, *radius),
         Vec3Offset::RandomInCircle(radius) => {
             let v = random_in_circle(rng, *radius);
@@ -278,6 +345,54 @@ pub enum AvianGatherer {
     AllEntitiesInRadius(f32),
 }
 
+impl AttributeResolvable for AvianGatherer {
+    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
+        match self {
+            Self::Sphere { radius, count }
+            | Self::Circle { radius, count } => {
+                radius.should_resolve(&format!("{prefix}.radius"), attrs)
+                    || count.should_resolve(&format!("{prefix}.count"), attrs)
+            }
+            Self::Box { half_extents: _, count } => {
+                count.should_resolve(&format!("{prefix}.count"), attrs)
+            }
+            Self::Line { direction: _, length, count } => {
+                length.should_resolve(&format!("{prefix}.length"), attrs)
+                    || count.should_resolve(&format!("{prefix}.count"), attrs)
+            }
+            Self::EntitiesInSphere(radius)
+            | Self::EntitiesInCircle(radius)
+            | Self::NearestEntities(radius)
+            | Self::AllEntitiesInRadius(radius) => {
+                radius.should_resolve(&format!("{prefix}.radius"), attrs)
+            }
+        }
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
+        match self {
+            Self::Sphere { radius, count }
+            | Self::Circle { radius, count } => {
+                radius.resolve(&format!("{prefix}.radius"), attrs);
+                count.resolve(&format!("{prefix}.count"), attrs);
+            }
+            Self::Box { half_extents: _, count } => {
+                count.resolve(&format!("{prefix}.count"), attrs);
+            }
+            Self::Line { direction: _, length, count } => {
+                length.resolve(&format!("{prefix}.length"), attrs);
+                count.resolve(&format!("{prefix}.count"), attrs);
+            }
+            Self::EntitiesInSphere(radius)
+            | Self::EntitiesInCircle(radius)
+            | Self::NearestEntities(radius)
+            | Self::AllEntitiesInRadius(radius) => {
+                radius.resolve(&format!("{prefix}.radius"), attrs);
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AvianFilter
 // ---------------------------------------------------------------------------
@@ -300,6 +415,16 @@ impl Default for AvianFilter {
     }
 }
 
+impl AttributeResolvable for AvianFilter {
+    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
+        self.count.should_resolve(&format!("{prefix}.count"), attrs)
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
+        self.count.resolve(&format!("{prefix}.count"), attrs);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -309,6 +434,11 @@ impl Plugin for AvianDieselPlugin {
     fn build(&self, app: &mut App) {
         // Core diesel infrastructure (gearbox, repeater, despawn, transitions, etc.)
         app.add_plugins(AvianBackend::plugin_core());
+
+        // Register AttributeDerived for concrete AvianBackend types
+        use bevy_diesel::bevy_gauge::prelude::AttributesAppExt;
+        app.register_attribute_derived::<bevy_diesel::spawn::SpawnConfig<AvianBackend>>();
+        app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
 
         // Propagation: reads GoOffOrigin, writes GoOff
         app.add_systems(Update,
@@ -456,10 +586,34 @@ impl Default for NumberType {
     }
 }
 
+impl AttributeResolvable for NumberType {
+    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
+        match self {
+            Self::All => false,
+            Self::Fixed(n) => n.should_resolve(prefix, attrs),
+            Self::Random(min, max) => {
+                min.should_resolve(&format!("{prefix}.min"), attrs)
+                    || max.should_resolve(&format!("{prefix}.max"), attrs)
+            }
+        }
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
+        match self {
+            Self::All => {}
+            Self::Fixed(n) => n.resolve(prefix, attrs),
+            Self::Random(min, max) => {
+                min.resolve(&format!("{prefix}.min"), attrs);
+                max.resolve(&format!("{prefix}.max"), attrs);
+            }
+        }
+    }
+}
+
 impl NumberType {
     /// Resolve to a concrete count. Panics on `All` — use only for gatherers
     /// where a count is always required.
-    pub fn resolve(&self, rng: &mut dyn RngCore) -> usize {
+    pub fn resolve_count(&self, rng: &mut dyn RngCore) -> usize {
         match self {
             NumberType::All => panic!("NumberType::All has no concrete count"),
             NumberType::Fixed(n) => *n,
@@ -478,7 +632,7 @@ impl NumberType {
     fn resolve_limit(&self, rng: &mut dyn RngCore) -> Option<usize> {
         match self {
             NumberType::All => None,
-            _ => Some(self.resolve(rng)),
+            _ => Some(self.resolve_count(rng)),
         }
     }
 }

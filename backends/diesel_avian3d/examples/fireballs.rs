@@ -10,6 +10,7 @@ use avian3d::prelude::*;
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use diesel_avian3d::prelude::*;
+use diesel_avian3d::DirectionOffset;
 
 // ---------------------------------------------------------------------------
 // Team / collision filtering
@@ -226,7 +227,7 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
             (
                 Name::new("SpawnProjectile"),
                 SpawnConfig::invoker("explosive_projectile")
-                    .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
+                    .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 1.5)))
                     .with_target_generator(TargetGenerator::at_invoker_target()),
             ),
         );
@@ -326,7 +327,7 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
             (
                 Name::new("SpawnZone"),
                 SpawnConfig::passed("firestorm_zone")
-                    .with_offset(Vec3Offset::Fixed(Vec3::new(0.0, 8.0, 0.0))),
+                    .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 8.0))),
             ),
         );
 

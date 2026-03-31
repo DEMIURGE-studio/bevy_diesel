@@ -2,6 +2,8 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
+use bevy_gauge::prelude::AttributeDerived;
+use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
 
@@ -195,6 +197,29 @@ impl<B: SpatialBackend> TargetGenerator<B> {
 }
 
 // ---------------------------------------------------------------------------
+// AttributeResolvable for TargetGenerator
+// ---------------------------------------------------------------------------
+
+impl<B: SpatialBackend> AttributeResolvable for TargetGenerator<B>
+where
+    B::Offset: AttributeResolvable,
+    B::Gatherer: AttributeResolvable,
+    B::Filter: AttributeResolvable,
+{
+    fn should_resolve(&self, prefix: &str, attrs: &bevy_gauge::attributes::Attributes) -> bool {
+        self.offset.should_resolve(&format!("{prefix}.offset"), attrs)
+            || self.gatherer.should_resolve(&format!("{prefix}.gatherer"), attrs)
+            || self.filter.should_resolve(&format!("{prefix}.filter"), attrs)
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &bevy_gauge::attributes::Attributes) {
+        self.offset.resolve(&format!("{prefix}.offset"), attrs);
+        self.gatherer.resolve(&format!("{prefix}.gatherer"), attrs);
+        self.filter.resolve(&format!("{prefix}.filter"), attrs);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TargetMutator<B>
 // ---------------------------------------------------------------------------
 
@@ -265,5 +290,49 @@ impl<B: SpatialBackend> TargetMutator<B> {
     pub fn with_filter(mut self, filter: B::Filter) -> Self {
         self.generator.filter = filter;
         self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AttributeResolvable for TargetMutator
+// ---------------------------------------------------------------------------
+
+impl<B: SpatialBackend> AttributeResolvable for TargetMutator<B>
+where
+    B::Offset: AttributeResolvable,
+    B::Gatherer: AttributeResolvable,
+    B::Filter: AttributeResolvable,
+{
+    fn should_resolve(&self, prefix: &str, attrs: &bevy_gauge::attributes::Attributes) -> bool {
+        self.generator.should_resolve(prefix, attrs)
+    }
+
+    fn resolve(&mut self, prefix: &str, attrs: &bevy_gauge::attributes::Attributes) {
+        self.generator.resolve(prefix, attrs);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AttributeDerived for TargetMutator (bridges to AttributeResolvable)
+// ---------------------------------------------------------------------------
+
+impl<B: SpatialBackend> AttributeDerived for TargetMutator<B>
+where
+    B::Offset: AttributeResolvable,
+    B::Gatherer: AttributeResolvable,
+    B::Filter: AttributeResolvable,
+{
+    fn should_update(
+        &self,
+        attrs: &bevy_gauge::attributes::Attributes,
+    ) -> bool {
+        self.should_resolve("TargetMutator", attrs)
+    }
+
+    fn update_from_attributes(
+        &mut self,
+        attrs: &bevy_gauge::attributes::Attributes,
+    ) {
+        self.resolve("TargetMutator", attrs);
     }
 }

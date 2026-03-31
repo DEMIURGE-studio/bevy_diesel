@@ -58,6 +58,7 @@ pub mod prelude {
         Attributes,
         AttributesMut,
         AttributeRequirements,
+        AttributeResolvable,
         InstantExt,
     };
     pub use bevy_gauge::mod_set;
