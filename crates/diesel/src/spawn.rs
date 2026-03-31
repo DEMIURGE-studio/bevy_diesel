@@ -81,6 +81,9 @@ impl<B: SpatialBackend> SpawnConfig<B> {
     pub fn passed(template_id: &str) -> Self {
         Self::new(template_id, TargetType::Passed)
     }
+    pub fn at_position(template_id: &str, position: B::Pos) -> Self {
+        Self::new(template_id, TargetType::Position(position))
+    }
     pub fn at_zero(template_id: &str) -> Self
     where
         B::Pos: Default,
@@ -176,7 +179,6 @@ pub fn spawn_system<B: SpatialBackend>(
     q_invoker: Query<&InvokedBy>,
     q_child_of: Query<&ChildOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
-    q_global_transform: Query<&GlobalTransform>,
     template_registry: Res<TemplateRegistry>,
     mut ctx: B::Context<'_, '_>,
     mut commands: Commands,
@@ -249,10 +251,13 @@ pub fn spawn_system<B: SpatialBackend>(
         };
 
         for (i, spawn_target) in spawn_targets.iter().enumerate() {
-            let final_transform =
-                B::spawn_transform(spawn_target.position, parent_entity, &q_global_transform);
-
-            let spawned_entity = commands.spawn((final_transform, InvokedBy(invoker))).id();
+            let spawned_entity = commands.spawn(InvokedBy(invoker)).id();
+            B::insert_position(
+                &mut commands.entity(spawned_entity),
+                &ctx,
+                spawn_target.position,
+                parent_entity,
+            );
             template_registry.get(&spawn_config.template_id).unwrap()(
                 &mut commands,
                 Some(spawned_entity),
@@ -299,8 +304,6 @@ pub fn spawn_system<B: SpatialBackend>(
     }
 }
 
-// Keep old name as alias
-pub use spawn_system as spawn_observer;
 
 // ---------------------------------------------------------------------------
 // Internal pipeline helper

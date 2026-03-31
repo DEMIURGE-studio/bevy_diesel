@@ -73,12 +73,13 @@ pub trait SpatialBackend: Send + Sync + 'static {
         origin: Self::Pos,
     ) -> Vec<Target<Self::Pos>>;
 
-    /// Compute a `Transform` for spawning at `world_pos`, local to `parent` if given.
-    fn spawn_transform(
-        world_pos: Self::Pos,
+    /// Insert position component(s) onto a spawned entity.
+    fn insert_position(
+        commands: &mut EntityCommands,
+        ctx: &Self::Context<'_, '_>,
+        pos: Self::Pos,
         parent: Option<Entity>,
-        q_global_transform: &Query<&GlobalTransform>,
-    ) -> Transform;
+    );
 
     /// Core plugin: state machines, repeaters, despawn, transitions, propagation.
     fn plugin_core() -> DieselCorePlugin<Self>
@@ -105,7 +106,7 @@ pub trait SpatialBackend: Send + Sync + 'static {
 
 /// Registers generic diesel infrastructure for a `SpatialBackend`.
 ///
-/// Backend-specific observers (`propagate_observer`, `spawn_observer`, etc.)
+/// Backend-specific systems (`propagate_observer`, `spawn_system`, etc.)
 /// must be registered by the backend's `plugin()` override due to the Context GAT.
 pub struct DieselCorePlugin<B: SpatialBackend> {
     _marker: PhantomData<B>,

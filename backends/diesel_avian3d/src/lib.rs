@@ -53,6 +53,7 @@ pub mod prelude {
 pub struct AvianContext<'w, 's> {
     pub spatial_query: SpatialQuery<'w, 's>,
     pub transforms: Query<'w, 's, &'static Transform>,
+    global_transforms: Query<'w, 's, &'static GlobalTransform>,
     rng: Local<'s, SplitMix64>,
 }
 
@@ -178,18 +179,23 @@ impl SpatialBackend for AvianBackend {
         limit_count(targets, &filter.count, &mut ctx.rng)
     }
 
-    fn spawn_transform(
+    fn insert_position(
+        commands: &mut EntityCommands,
+        ctx: &AvianContext,
         world_pos: Vec3,
         parent: Option<Entity>,
-        q_global_transform: &Query<&GlobalTransform>,
-    ) -> Transform {
-        if let Some(parent_entity) = parent {
-            if let Ok(parent_gt) = q_global_transform.get(parent_entity) {
+    ) {
+        let transform = if let Some(parent_entity) = parent {
+            if let Ok(parent_gt) = ctx.global_transforms.get(parent_entity) {
                 let local_pos = parent_gt.affine().inverse().transform_point3(world_pos);
-                return Transform::from_translation(local_pos);
+                Transform::from_translation(local_pos)
+            } else {
+                Transform::from_translation(world_pos)
             }
-        }
-        Transform::from_translation(world_pos)
+        } else {
+            Transform::from_translation(world_pos)
+        };
+        commands.insert(transform);
     }
 
     fn plugin() -> impl Plugin {
@@ -312,7 +318,7 @@ impl Plugin for AvianDieselPlugin {
 
         // Leaf effect systems: read GoOff
         app.add_systems(Update, (
-            bevy_diesel::spawn::spawn_observer::<AvianBackend>,
+            bevy_diesel::spawn::spawn_system::<AvianBackend>,
             bevy_diesel::print::print_effect::<Vec3>,
             bevy_diesel::gauge::modifiers::modifier_set_system::<Vec3>,
             bevy_diesel::gauge::instant::instant_set_system::<Vec3>,

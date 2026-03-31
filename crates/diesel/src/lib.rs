@@ -48,7 +48,7 @@ pub mod prelude {
     pub use crate::print::PrintLn;
     pub use crate::spawn::{
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
-        SpawnConfig, TemplateRegistry, spawn_observer,
+        SpawnConfig, TemplateRegistry, spawn_system,
     };
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
