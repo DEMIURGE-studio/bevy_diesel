@@ -2,9 +2,6 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use bevy_diesel::invoker::InvokedBy;
-use crate::ballistics::{
-    calculate_high_angle_velocity_with_speed, calculate_low_angle_velocity_with_speed,
-};
 use crate::prelude::GoOff;
 
 /// Which ballistic trajectory to use when launching.
@@ -48,48 +45,48 @@ pub struct VelocityEffectPlugin;
 
 impl Plugin for VelocityEffectPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(velocity_effect_observer);
+        app.add_systems(Update, velocity_effect_system);
     }
 }
 
-fn velocity_effect_observer(
-    go_off: On<GoOff>,
+fn velocity_effect_system(
+    mut reader: MessageReader<GoOff>,
     q_velocity: Query<&VelocityEffect>,
     q_invoker: Query<&InvokedBy>,
     mut q_target: Query<(&Transform, &mut LinearVelocity)>,
 ) {
-    let effect_entity = go_off.entity;
+    for go_off in reader.read() {
+        let effect_entity = go_off.entity;
 
-    let Some(target) = go_off.targets.first() else {
-        return;
-    };
+        let target = &go_off.target;
 
-    let Ok(velocity_effect) = q_velocity.get(effect_entity) else {
-        return;
-    };
+        let Ok(velocity_effect) = q_velocity.get(effect_entity) else {
+            continue;
+        };
 
-    let invoker_entity = q_invoker.root_ancestor(effect_entity);
+        let invoker_entity = q_invoker.root_ancestor(effect_entity);
 
-    let Ok((transform, mut linear_velocity)) = q_target.get_mut(invoker_entity) else {
-        return;
-    };
+        let Ok((transform, mut linear_velocity)) = q_target.get_mut(invoker_entity) else {
+            continue;
+        };
 
-    let target_position = target.position;
+        let target_position = target.position;
 
-    let calculated_velocity = match velocity_effect.trajectory {
-        Trajectory::LowAngle => calculate_low_angle_velocity_with_speed(
-            transform.translation,
-            target_position,
-            velocity_effect.speed,
-            velocity_effect.gravity,
-        ),
-        Trajectory::HighAngle => calculate_high_angle_velocity_with_speed(
-            transform.translation,
-            target_position,
-            velocity_effect.speed,
-            velocity_effect.gravity,
-        ),
-    };
+        let calculated_velocity = match velocity_effect.trajectory {
+            Trajectory::LowAngle => crate::ballistics::calculate_low_angle_velocity_with_speed(
+                transform.translation,
+                target_position,
+                velocity_effect.speed,
+                velocity_effect.gravity,
+            ),
+            Trajectory::HighAngle => crate::ballistics::calculate_high_angle_velocity_with_speed(
+                transform.translation,
+                target_position,
+                velocity_effect.speed,
+                velocity_effect.gravity,
+            ),
+        };
 
-    linear_velocity.0 = calculated_velocity;
+        linear_velocity.0 = calculated_velocity;
+    }
 }

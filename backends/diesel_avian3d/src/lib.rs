@@ -19,13 +19,12 @@ pub mod prelude {
         calculate_high_angle_velocity_with_speed, calculate_low_angle_velocity_with_speed,
         calculate_velocity_with_speed, distance_lock,
     };
-    pub use crate::collision::CollisionFilterPlugin;
+    pub use crate::collision::{CollisionFilter, CollisionFilterPlugin, Collides};
     pub use crate::projectile::{
         LinearProjectile, LinearProjectileEffect, ProjectileEffect, ProjectilePlugin,
     };
     pub use crate::velocity::{Trajectory, VelocityEffect, VelocityEffectPlugin};
-    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
-    pub use crate::{on_spawn_invoker, on_spawn_origin, on_spawn_target};
+    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, NumberType, Vec3Offset};
     pub use bevy_diesel::prelude::*;
 
     // Vec3 type aliases
@@ -54,6 +53,7 @@ pub mod prelude {
 pub struct AvianContext<'w, 's> {
     pub spatial_query: SpatialQuery<'w, 's>,
     pub transforms: Query<'w, 's, &'static Transform>,
+    global_transforms: Query<'w, 's, &'static GlobalTransform>,
     rng: Local<'s, SplitMix64>,
 }
 
@@ -160,7 +160,7 @@ impl SpatialBackend for AvianBackend {
                     exclude,
                     &ctx.transforms,
                 );
-                sort_by_distance::<AvianBackend>(&mut targets, &origin);
+                sort_by_distance(&mut targets, &origin);
                 targets
             }
         }
@@ -168,7 +168,7 @@ impl SpatialBackend for AvianBackend {
 
     fn apply_filter(
         ctx: &mut AvianContext,
-        mut targets: Vec<bevy_diesel::target::Target<Vec3>>,
+        targets: Vec<bevy_diesel::target::Target<Vec3>>,
         filter: &AvianFilter,
         _invoker: Entity,
         _origin: Vec3,
@@ -176,25 +176,26 @@ impl SpatialBackend for AvianBackend {
         // TODO: line_of_sight filtering using ctx.spatial_query
 
         // Count limiting
-        if let Some(count) = &filter.count {
-            targets = limit_count(targets, count, &mut ctx.rng);
-        }
-
-        targets
+        limit_count(targets, &filter.count, &mut ctx.rng)
     }
 
-    fn spawn_transform(
+    fn insert_position(
+        commands: &mut EntityCommands,
+        ctx: &AvianContext,
         world_pos: Vec3,
         parent: Option<Entity>,
-        q_global_transform: &Query<&GlobalTransform>,
-    ) -> Transform {
-        if let Some(parent_entity) = parent {
-            if let Ok(parent_gt) = q_global_transform.get(parent_entity) {
+    ) {
+        let transform = if let Some(parent_entity) = parent {
+            if let Ok(parent_gt) = ctx.global_transforms.get(parent_entity) {
                 let local_pos = parent_gt.affine().inverse().transform_point3(world_pos);
-                return Transform::from_translation(local_pos);
+                Transform::from_translation(local_pos)
+            } else {
+                Transform::from_translation(world_pos)
             }
-        }
-        Transform::from_translation(world_pos)
+        } else {
+            Transform::from_translation(world_pos)
+        };
+        commands.insert(transform);
     }
 
     fn plugin() -> impl Plugin {
@@ -284,8 +285,8 @@ pub enum AvianGatherer {
 /// Post-gather filter config.
 #[derive(Clone, Debug)]
 pub struct AvianFilter {
-    /// Max target count.
-    pub count: Option<NumberType>,
+    /// Max target count. `NumberType::All` passes everything through.
+    pub count: NumberType,
     /// Require line-of-sight (TODO).
     pub line_of_sight: bool,
 }
@@ -293,7 +294,7 @@ pub struct AvianFilter {
 impl Default for AvianFilter {
     fn default() -> Self {
         Self {
-            count: None,
+            count: NumberType::All,
             line_of_sight: false,
         }
     }
@@ -309,12 +310,19 @@ impl Plugin for AvianDieselPlugin {
         // Core diesel infrastructure (gearbox, repeater, despawn, transitions, etc.)
         app.add_plugins(AvianBackend::plugin_core());
 
-        // Backend-specific observers (require concrete position type or AvianContext)
-        app.add_observer(propagate_observer::<AvianBackend>);
-        app.add_observer(bevy_diesel::spawn::spawn_observer::<AvianBackend>);
-        app.add_observer(bevy_diesel::print::print_effect::<Vec3>);
-        app.add_observer(bevy_diesel::gauge::modifiers::modifier_set_observer::<Vec3>);
-        app.add_observer(bevy_diesel::gauge::instant::instant_set_observer::<Vec3>);
+        // Propagation: reads GoOffOrigin, writes GoOff
+        app.add_systems(Update,
+            propagate_observer::<AvianBackend>
+                .in_set(bevy_diesel::DieselSet::Propagation),
+        );
+
+        // Leaf effect systems: read GoOff
+        app.add_systems(Update, (
+            bevy_diesel::spawn::spawn_system::<AvianBackend>,
+            bevy_diesel::print::print_effect::<Vec3>,
+            bevy_diesel::gauge::modifiers::modifier_set_system::<Vec3>,
+            bevy_diesel::gauge::instant::instant_set_system::<Vec3>,
+        ).in_set(bevy_diesel::DieselSet::Effects));
 
         // Avian3d-specific actions
         app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
@@ -322,25 +330,6 @@ impl Plugin for AvianDieselPlugin {
         // Collision system (unfiltered - entities with Collides marker)
         collision::plugin(app);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Concrete Vec3 spawn observer helpers
-// ---------------------------------------------------------------------------
-
-/// Forward OnSpawnOrigin<Vec3> to GoOff. Use with `.observe(on_spawn_origin)`.
-pub fn on_spawn_origin(ev: On<bevy_diesel::spawn::OnSpawnOrigin<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_origin::<Vec3>(ev, commands);
-}
-
-/// Forward OnSpawnTarget<Vec3> to GoOff. Use with `.observe(on_spawn_target)`.
-pub fn on_spawn_target(ev: On<bevy_diesel::spawn::OnSpawnTarget<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_target::<Vec3>(ev, commands);
-}
-
-/// Forward OnSpawnInvoker<Vec3> to GoOff. Use with `.observe(on_spawn_invoker)`.
-pub fn on_spawn_invoker(ev: On<bevy_diesel::spawn::OnSpawnInvoker<Vec3>>, commands: Commands) {
-    bevy_diesel::spawn::on_spawn_invoker::<Vec3>(ev, commands);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,4 +436,95 @@ fn random_in_circle(rng: &mut dyn RngCore, radius: f32) -> Vec2 {
             return v * radius;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// NumberType - count: fixed, random range, or unlimited
+// ---------------------------------------------------------------------------
+
+/// Count specification: fixed, random range, or all (no limit).
+#[derive(Clone, Debug)]
+pub enum NumberType {
+    All,
+    Fixed(usize),
+    Random(usize, usize),
+}
+
+impl Default for NumberType {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl NumberType {
+    /// Resolve to a concrete count. Panics on `All` — use only for gatherers
+    /// where a count is always required.
+    pub fn resolve(&self, rng: &mut dyn RngCore) -> usize {
+        match self {
+            NumberType::All => panic!("NumberType::All has no concrete count"),
+            NumberType::Fixed(n) => *n,
+            NumberType::Random(min, max) => {
+                if min >= max {
+                    return *min;
+                }
+                let range = max - min + 1;
+                let r = (rng.next_u64() as usize) % range;
+                min + r
+            }
+        }
+    }
+
+    /// Resolve to a concrete count, or `None` for unlimited.
+    fn resolve_limit(&self, rng: &mut dyn RngCore) -> Option<usize> {
+        match self {
+            NumberType::All => None,
+            _ => Some(self.resolve(rng)),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Filter utilities
+// ---------------------------------------------------------------------------
+
+/// Limit targets via reservoir sampling.
+fn limit_count(
+    targets: Vec<bevy_diesel::target::Target<Vec3>>,
+    number: &NumberType,
+    rng: &mut dyn RngCore,
+) -> Vec<bevy_diesel::target::Target<Vec3>> {
+    let max_count = match number.resolve_limit(rng) {
+        Some(n) => n,
+        None => return targets,
+    };
+
+    if targets.len() <= max_count {
+        return targets;
+    }
+
+    // Reservoir sampling
+    let mut selected = Vec::with_capacity(max_count);
+    for (i, target) in targets.into_iter().enumerate() {
+        if selected.len() < max_count {
+            selected.push(target);
+        } else {
+            let r = (rng.next_u64() as usize) % (i + 1);
+            if r < max_count {
+                selected[r] = target;
+            }
+        }
+    }
+    selected
+}
+
+/// Sort targets by distance (nearest first).
+fn sort_by_distance(
+    targets: &mut [bevy_diesel::target::Target<Vec3>],
+    origin: &Vec3,
+) {
+    targets.sort_by(|a, b| {
+        let dist_a = a.position.distance(*origin);
+        let dist_b = b.position.distance(*origin);
+        dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+    });
 }

@@ -76,58 +76,55 @@ impl Plugin for DieselAbilityPoolPlugin {
 
 /// On enter, register all Ability children with the PAE's target.
 pub fn emit_register_on_active(
-    enter_state: On<EnterState>,
+    q_newly_active: Query<&Active, Added<Active>>,
     q_children: Query<&Children>,
     q_ability: Query<Entity, With<Ability>>,
     q_effect_target: Query<&EffectTarget>,
     mut commands: Commands,
 ) {
-    let effect_entity = enter_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        warn!(
-            "RegisterAbility: EffectTarget missing on effect {}",
-            effect_entity
-        );
-        return;
-    };
-    let target_entity = effect_target.0;
+    for active in &q_newly_active {
+        let machine = active.machine;
+        let Ok(effect_target) = q_effect_target.get(machine) else {
+            continue;
+        };
+        let target_entity = effect_target.0;
 
-    let mut abilities = Vec::new();
-    collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
-    for ability_entity in abilities {
-        commands.trigger(RegisterAbility {
-            target: target_entity,
-            ability_entity,
-            source_entity: effect_entity,
-        });
+        let mut abilities = Vec::new();
+        collect_all_abilities(machine, &q_children, &q_ability, &mut abilities);
+        for ability_entity in abilities {
+            commands.trigger(RegisterAbility {
+                target: target_entity,
+                ability_entity,
+                source_entity: machine,
+            });
+        }
     }
 }
 
 /// On exit, unregister all Ability children from the PAE's target.
 pub fn emit_unregister_on_inactive(
-    exit_state: On<ExitState>,
+    mut removed: RemovedComponents<Active>,
     q_children: Query<&Children>,
     q_ability: Query<Entity, With<Ability>>,
     q_effect_target: Query<&EffectTarget>,
+    q_substate_of: Query<&SubstateOf>,
     mut commands: Commands,
 ) {
-    let effect_entity = exit_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        warn!(
-            "UnregisterAbility: EffectTarget missing on effect {}",
-            effect_entity
-        );
-        return;
-    };
-    let target_entity = effect_target.0;
+    for entity in removed.read() {
+        let machine = q_substate_of.root_ancestor(entity);
+        let Ok(effect_target) = q_effect_target.get(machine) else {
+            continue;
+        };
+        let target_entity = effect_target.0;
 
-    let mut abilities = Vec::new();
-    collect_all_abilities(effect_entity, &q_children, &q_ability, &mut abilities);
-    for ability_entity in abilities {
-        commands.trigger(UnregisterAbility {
-            target: target_entity,
-            ability_entity,
-        });
+        let mut abilities = Vec::new();
+        collect_all_abilities(machine, &q_children, &q_ability, &mut abilities);
+        for ability_entity in abilities {
+            commands.trigger(UnregisterAbility {
+                target: target_entity,
+                ability_entity,
+            });
+        }
     }
 }
 

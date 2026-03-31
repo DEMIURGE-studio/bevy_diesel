@@ -15,12 +15,15 @@ impl PrintLn {
 }
 
 pub fn print_effect<P: Clone + Copy + Send + Sync + Default + Debug + 'static>(
-    go_off: On<GoOff<P>>,
+    mut reader: MessageReader<GoOff<P>>,
     query: Query<&PrintLn>,
 ) {
-    let entity = go_off.entity;
-    let Ok(print) = query.get(entity) else {
-        return;
-    };
-    println!("Entity {:?} says: {:?}", entity, print.0);
+    let mut count = 0u32;
+    for go_off in reader.read() {
+        count += 1;
+        let entity = go_off.entity;
+        let Ok(print) = query.get(entity) else {
+            continue;
+        };
+    }
 }

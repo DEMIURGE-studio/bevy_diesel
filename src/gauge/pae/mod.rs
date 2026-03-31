@@ -22,8 +22,9 @@ impl Plugin for DieselPaePlugin {
         app.add_systems(
             Update,
             (
-                stats_change_system
-                    .before(bevy_gearbox::transitions::check_always_on_guards_changed),
+                pae_exit_system.after(GearboxSet),
+                pae_enter_system.after(GearboxSet),
+                stats_change_system,
                 active_effects_watcher_system,
             ),
         )
@@ -33,77 +34,49 @@ impl Plugin for DieselPaePlugin {
 }
 
 // ---------------------------------------------------------------------------
-// State enter/exit observers
+// State enter/exit systems (use Active component change detection)
 // ---------------------------------------------------------------------------
 
-pub(crate) fn on_enter_applied_state(
-    enter_state: On<EnterState>,
-    q_effect: Query<&AppliedModifiers>,
+fn pae_exit_system(
+    mut removed: RemovedComponents<Active>,
+    q_active_state: Query<(), With<StateComponent<ActiveState>>>,
+    q_activated_mods: Query<&ActivatedModifiers>,
     q_effect_target: Query<&EffectTarget>,
+    q_substate_of: Query<&SubstateOf>,
     mut attributes: AttributesMut,
 ) {
-    let effect_entity = enter_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        return;
-    };
-    let target_entity = effect_target.0;
-
-    if let Ok(applied_modifiers) = q_effect.get(effect_entity) {
-        applied_modifiers.apply(target_entity, &mut attributes);
+    for entity in removed.read() {
+        // Only act when exiting the ActiveState, not any other PAE state
+        if !q_active_state.contains(entity) {
+            continue;
+        }
+        let machine = q_substate_of.root_ancestor(entity);
+        if let Ok(effect_target) = q_effect_target.get(machine) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(machine) {
+                activated_modifiers.remove(effect_target.0, &mut attributes);
+            }
+        }
     }
 }
 
-pub(crate) fn on_enter_active_state(
-    enter_state: On<EnterState>,
-    q_effect: Query<&ActivatedModifiers>,
+fn pae_enter_system(
+    q_newly_active: Query<&Active, (Added<Active>, With<StateComponent<ActiveState>>)>,
+    q_activated_mods: Query<&ActivatedModifiers>,
     q_effect_target: Query<&EffectTarget>,
     mut attributes: AttributesMut,
 ) {
-    let effect_entity = enter_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        return;
-    };
-    let target_entity = effect_target.0;
-
-    if let Ok(activated_modifiers) = q_effect.get(effect_entity) {
-        activated_modifiers.apply(target_entity, &mut attributes);
+    for active in &q_newly_active {
+        if let Ok(effect_target) = q_effect_target.get(active.machine) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(active.machine) {
+                activated_modifiers.apply(effect_target.0, &mut attributes);
+            }
+        }
     }
-}
-
-pub(crate) fn on_exit_active_state(
-    exit_state: On<ExitState>,
-    q_effect: Query<(&EffectTarget, &ActivatedModifiers)>,
-    mut attributes: AttributesMut,
-) {
-    let effect_entity = exit_state.state_machine;
-    if let Ok((effect_target, activated_modifiers)) = q_effect.get(effect_entity) {
-        let target_entity = effect_target.0;
-        activated_modifiers.remove(target_entity, &mut attributes);
-    }
-}
-
-pub(crate) fn on_enter_unapplied_state(
-    enter_state: On<EnterState>,
-    q_effect: Query<&AppliedModifiers>,
-    q_effect_target: Query<&EffectTarget>,
-    mut attributes: AttributesMut,
-    mut commands: Commands,
-) {
-    let effect_entity = enter_state.state_machine;
-    let Ok(effect_target) = q_effect_target.get(effect_entity) else {
-        return;
-    };
-    let target_entity = effect_target.0;
-
-    if let Ok(applied_modifiers) = q_effect.get(effect_entity) {
-        applied_modifiers.remove(target_entity, &mut attributes);
-    }
-
-    commands.entity(effect_entity).try_remove::<EffectTarget>();
 }
 
 // ---------------------------------------------------------------------------
-// EffectTarget observers
+// EffectTarget observers (these are fine as observers - they react to
+// component Add/Remove, not state machine transitions)
 // ---------------------------------------------------------------------------
 
 fn on_add_effect_target(
@@ -157,7 +130,7 @@ fn active_effects_watcher_system(
     q_changed_pae: Query<Entity, Changed<ActivatedModifiers>>,
     q_pae: Query<Option<&ActivatedModifiers>, With<PersistentAttributeEffect>>,
     q_active: Query<Entity, (With<PersistentAttributeEffect>, With<ActiveState>)>,
-    mut commands: Commands,
+    mut writer: MessageWriter<PAESuspend>,
 ) {
     for pae_entity in q_changed_pae.iter() {
         let Ok(maybe_activated_mods) = q_pae.get(pae_entity) else {
@@ -168,7 +141,7 @@ fn active_effects_watcher_system(
         let is_currently_active = q_active.contains(pae_entity);
 
         if !should_be_active && is_currently_active {
-            commands.trigger(PAESuspend { target: pae_entity });
+            writer.write(PAESuspend { target: pae_entity });
         }
     }
 }

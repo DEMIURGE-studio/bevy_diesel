@@ -1,7 +1,44 @@
+use std::fmt::Debug;
+
 use avian3d::prelude::{CollisionStart, Collisions, Position};
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
+
+// ---------------------------------------------------------------------------
+// CollisionFilter trait + Collides marker
+// ---------------------------------------------------------------------------
+
+/// Determines whether an ability can affect a target entity.
+///
+/// `Self` goes on the ability entity, `Self::Lookup` is queried on invoker/target.
+///
+/// ```ignore
+/// impl CollisionFilter for Faction {
+///     type Lookup = Alliance;
+///     fn can_target(&self, invoker: Option<&Alliance>, target: Option<&Alliance>) -> bool {
+///         match (self, invoker, target) {
+///             (Faction::Enemies, Some(i), Some(t)) => i.0 != t.0,
+///             _ => true,
+///         }
+///     }
+/// }
+/// ```
+pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
+    /// Component queried on invoker and target entities.
+    type Lookup: Component;
+
+    /// Return `true` if the ability should affect this target.
+    fn can_target(
+        &self,
+        invoker_data: Option<&Self::Lookup>,
+        target_data: Option<&Self::Lookup>,
+    ) -> bool;
+}
+
+/// Marker: every collision fires an event, no filtering.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Collides;
 
 // ---------------------------------------------------------------------------
 // Unfiltered collision system - fires for any entity with `Collides` marker
@@ -17,19 +54,18 @@ fn unfiltered_collision_system(
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
     collisions: Collisions,
-    mut commands: Commands,
+    mut entity_writer: MessageWriter<CollidedEntity<Vec3>>,
+    mut position_writer: MessageWriter<CollidedPosition<Vec3>>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
-        // Entity collision events
-        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut commands, *collider1, *collider2);
-        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut commands, *collider2, *collider1);
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut entity_writer, *collider2, *collider1);
 
-        // Position collision events
         if let Some(contacts) = collisions.get(*collider1, *collider2) {
             if let Some(contact) = contacts.find_deepest_contact() {
                 let position = contact.point;
-                emit_position_if(&q_collides, &mut commands, position, *collider1, *collider2);
-                emit_position_if(&q_collides, &mut commands, position, *collider2, *collider1);
+                emit_position_if(&q_collides, &mut position_writer, position, *collider1, *collider2);
+                emit_position_if(&q_collides, &mut position_writer, position, *collider2, *collider1);
             }
         }
     }
@@ -39,14 +75,13 @@ fn emit_entity_if(
     q_collides: &Query<(), With<Collides>>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
-    commands: &mut Commands,
+    writer: &mut MessageWriter<CollidedEntity<Vec3>>,
     ability: Entity,
     target: Entity,
 ) {
     if q_collides.get(ability).is_err() {
         return;
     }
-    // Don't collide with own invoker chain
     let invoker = q_invoker.root_ancestor(ability);
     if target == invoker {
         return;
@@ -54,12 +89,12 @@ fn emit_entity_if(
     let collision_pos = q_position.get(ability).ok().map(|p| p.0)
         .or_else(|| q_position.get(target).ok().map(|p| p.0))
         .unwrap_or(Vec3::ZERO);
-    commands.trigger(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
+    writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
 }
 
 fn emit_position_if(
     q_collides: &Query<(), With<Collides>>,
-    commands: &mut Commands,
+    writer: &mut MessageWriter<CollidedPosition<Vec3>>,
     position: Vec3,
     ability: Entity,
     target: Entity,
@@ -67,7 +102,7 @@ fn emit_position_if(
     if q_collides.get(ability).is_err() {
         return;
     }
-    commands.trigger(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
+    writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +110,6 @@ fn emit_position_if(
 // ---------------------------------------------------------------------------
 
 /// Adds filtered collision handling for a `CollisionFilter` implementation.
-///
-/// ```ignore
-/// app.add_plugins(CollisionFilterPlugin::<MyTeamFilter>::default());
-/// ```
 pub struct CollisionFilterPlugin<F: CollisionFilter> {
     _marker: std::marker::PhantomData<F>,
 }
@@ -104,17 +135,18 @@ fn filtered_collision_system<F: CollisionFilter>(
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
     collisions: Collisions,
-    mut commands: Commands,
+    mut entity_writer: MessageWriter<CollidedEntity<Vec3>>,
+    mut position_writer: MessageWriter<CollidedPosition<Vec3>>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
-        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut commands, *collider1, *collider2);
-        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut commands, *collider2, *collider1);
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut entity_writer, *collider2, *collider1);
 
         if let Some(contacts) = collisions.get(*collider1, *collider2) {
             if let Some(contact) = contacts.find_deepest_contact() {
                 let position = contact.point;
-                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut commands, position, *collider1, *collider2);
-                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut commands, position, *collider2, *collider1);
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut position_writer, position, *collider1, *collider2);
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut position_writer, position, *collider2, *collider1);
             }
         }
     }
@@ -144,16 +176,15 @@ fn emit_entity_filtered<F: CollisionFilter>(
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
-    commands: &mut Commands,
+    writer: &mut MessageWriter<CollidedEntity<Vec3>>,
     ability: Entity,
     target: Entity,
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
-        // Use ability's position as collision point, fall back to target's
         let collision_pos = q_position.get(ability).ok().map(|p| p.0)
             .or_else(|| q_position.get(target).ok().map(|p| p.0))
             .unwrap_or(Vec3::ZERO);
-        commands.trigger(CollidedEntity::new(ability, vec![Target::entity(target, collision_pos)]));
+        writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
     }
 }
 
@@ -161,12 +192,12 @@ fn emit_position_filtered<F: CollisionFilter>(
     q_filter: &Query<&F>,
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
-    commands: &mut Commands,
+    writer: &mut MessageWriter<CollidedPosition<Vec3>>,
     position: Vec3,
     ability: Entity,
     target: Entity,
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
-        commands.trigger(CollidedPosition::new(ability, vec![Target::entity(target, position)]));
+        writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
     }
 }

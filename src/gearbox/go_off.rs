@@ -1,5 +1,5 @@
-/// Creates an [`EntityEvent`] struct that bridges bevy_gearbox state machine
-/// transitions with diesel's `GoOff<P>` effect propagation.
+/// Creates a [`Message`] struct that serves as a gearbox state machine
+/// transition message in diesel's effect pipeline.
 ///
 /// # Usage
 ///
@@ -11,17 +11,13 @@
 macro_rules! go_off {
     ($Event:ident, $Pos:ty) => {
         #[derive(
-            ::bevy::prelude::EntityEvent,
+            ::bevy::prelude::Message,
             Clone,
             Debug,
-            ::bevy::prelude::Reflect,
         )]
-        #[bevy_gearbox::transition_event]
         pub struct $Event {
-            #[event_target]
             pub entity: ::bevy::prelude::Entity,
-            #[reflect(ignore)]
-            pub targets: ::std::vec::Vec<$crate::target::Target<$Pos>>,
+            pub target: $crate::target::Target<$Pos>,
         }
 
         $crate::go_off!(@impl $Event, $Pos);
@@ -31,50 +27,25 @@ macro_rules! go_off {
         impl $Event {
             pub fn new(
                 entity: ::bevy::prelude::Entity,
-                targets: ::std::vec::Vec<$crate::target::Target<$Pos>>,
+                target: $crate::target::Target<$Pos>,
             ) -> Self {
-                Self { entity, targets }
+                Self { entity, target }
             }
         }
 
-        impl ::bevy_gearbox::transitions::TransitionEvent for $Event {
-            type ExitEvent = ::bevy_gearbox::NoEvent;
-            type EdgeEvent = ::bevy_gearbox::NoEvent;
-            type EntryEvent = $crate::effect::GoOff<$Pos>;
+        impl ::bevy_gearbox::GearboxMessage for $Event {
             type Validator = ::bevy_gearbox::AcceptAll;
+            fn machine(&self) -> ::bevy::prelude::Entity { self.entity }
+        }
 
-            fn to_entry_event(
-                &self,
-                entering: ::bevy::prelude::Entity,
-                _exiting: ::bevy::prelude::Entity,
-                _edge: ::bevy::prelude::Entity,
-            ) -> Option<$crate::effect::GoOff<$Pos>> {
-                Some($crate::effect::GoOff::new(
-                    entering,
-                    self.targets.clone(),
+        impl ::bevy_gearbox::SideEffect<$Event> for $crate::effect::GoOffOrigin<$Pos> {
+            fn produce(
+                matched: &::bevy_gearbox::Matched<$Event>,
+            ) -> Option<Self> {
+                Some($crate::effect::GoOffOrigin::new(
+                    matched.target,
+                    matched.message.target,
                 ))
-            }
-        }
-
-        impl From<::std::vec::Vec<$crate::target::Target<$Pos>>>
-            for $Event
-        {
-            fn from(
-                value: ::std::vec::Vec<$crate::target::Target<$Pos>>,
-            ) -> Self {
-                Self {
-                    entity: ::bevy::prelude::Entity::PLACEHOLDER,
-                    targets: value,
-                }
-            }
-        }
-
-        impl $crate::gearbox::repeater::Repeatable for $Event {
-            fn repeat_tick(entity: ::bevy::prelude::Entity) -> Self {
-                Self {
-                    entity,
-                    targets: ::std::vec::Vec::new(),
-                }
             }
         }
     };

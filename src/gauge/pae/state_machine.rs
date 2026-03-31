@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use bevy_gauge::prelude::*;
 use bevy_gearbox::prelude::*;
-use bevy_gearbox::SimpleTransition;
 
 // ---------------------------------------------------------------------------
 // Marker + modifier components
@@ -89,28 +88,40 @@ pub struct AppliedState;
 pub struct ActiveState;
 
 // ---------------------------------------------------------------------------
-// Transition events
+// Transition messages
 // ---------------------------------------------------------------------------
 
 /// Trigger to apply a PAE: Unapplied → Applied.
-#[derive(SimpleTransition, EntityEvent, Reflect, Clone)]
+#[derive(Message, Reflect, Clone)]
 pub struct PAETryApply {
-    #[event_target]
     pub target: Entity,
+}
+
+impl GearboxMessage for PAETryApply {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.target }
 }
 
 /// Trigger to suspend a PAE: Active → Applied.
-#[derive(SimpleTransition, EntityEvent, Reflect, Clone)]
+#[derive(Message, Reflect, Clone)]
 pub struct PAESuspend {
-    #[event_target]
     pub target: Entity,
 }
 
+impl GearboxMessage for PAESuspend {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.target }
+}
+
 /// Trigger to unapply a PAE: Applied/Active → Unapplied.
-#[derive(SimpleTransition, EntityEvent, Reflect, Clone)]
+#[derive(Message, Reflect, Clone)]
 pub struct PAEUnapplyApproved {
-    #[event_target]
     pub target: Entity,
+}
+
+impl GearboxMessage for PAEUnapplyApproved {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.target }
 }
 
 // ---------------------------------------------------------------------------
@@ -156,31 +167,21 @@ pub fn pae_state_machine(
             SubstateOf(machine_entity),
             StateComponent(UnappliedState),
         ));
-        commands
-            .entity(unapplied_state)
-            .observe(super::on_enter_unapplied_state);
 
         commands.entity(applied_state).insert((
             SubstateOf(machine_entity),
             StateComponent(AppliedState),
         ));
-        commands
-            .entity(applied_state)
-            .observe(super::on_enter_applied_state);
 
         commands.entity(active_state).insert((
             SubstateOf(machine_entity),
             StateComponent(ActiveState),
         ));
-        commands
-            .entity(active_state)
-            .observe(super::on_enter_active_state)
-            .observe(super::on_exit_active_state);
 
         commands.entity(edge_unapplied_to_applied).insert((
             Source(unapplied_state),
             Target(applied_state),
-            EventEdge::<PAETryApply>::default(),
+            MessageEdge::<PAETryApply>::default(),
         ));
 
         commands.entity(edge_applied_to_active).insert((
@@ -194,19 +195,19 @@ pub fn pae_state_machine(
         commands.entity(edge_active_to_applied).insert((
             Source(active_state),
             Target(applied_state),
-            EventEdge::<PAESuspend>::default(),
+            MessageEdge::<PAESuspend>::default(),
         ));
 
         commands.entity(edge_to_unapplied).insert((
             Source(applied_state),
             Target(unapplied_state),
-            EventEdge::<PAEUnapplyApproved>::default(),
+            MessageEdge::<PAEUnapplyApproved>::default(),
         ));
 
         commands.entity(edge_active_to_unapplied).insert((
             Source(active_state),
             Target(unapplied_state),
-            EventEdge::<PAEUnapplyApproved>::default(),
+            MessageEdge::<PAEUnapplyApproved>::default(),
         ));
 
         commands.entity(machine_entity).insert((

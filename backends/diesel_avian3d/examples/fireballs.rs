@@ -66,6 +66,51 @@ struct ProjectileMarker;
 #[derive(Component)]
 struct FirestormZoneMarker;
 
+// ---------------------------------------------------------------------------
+// ScaleFadeVfx - scales entity down to zero over duration, then despawns
+// ---------------------------------------------------------------------------
+
+#[derive(Component)]
+struct ScaleFadeVfx {
+    duration: f32,
+    elapsed: f32,
+    starting_scale: Option<f32>,
+}
+
+impl ScaleFadeVfx {
+    fn new(duration: f32) -> Self {
+        Self {
+            duration,
+            elapsed: 0.0,
+            starting_scale: None,
+        }
+    }
+}
+
+fn scale_fade_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Transform, &mut ScaleFadeVfx)>,
+) {
+    for (entity, mut transform, mut fade) in query.iter_mut() {
+        if fade.starting_scale.is_none() {
+            fade.starting_scale = Some(transform.scale.x);
+        }
+        let Some(starting) = fade.starting_scale else {
+            continue;
+        };
+
+        fade.elapsed += time.delta_secs();
+        let remaining = fade.duration - fade.elapsed;
+        if remaining > 0.0 {
+            let factor = remaining / fade.duration;
+            transform.scale = Vec3::ONE * starting * factor;
+        } else {
+            commands.entity(entity).try_despawn();
+        }
+    }
+}
+
 // ===========================================================================
 // TEMPLATES
 // ===========================================================================
@@ -89,7 +134,7 @@ fn explosion_template(commands: &mut Commands, entity: Option<Entity>) -> Entity
         Name::new("Explosion"),
         ExplosionMarker,
         Visibility::Inherited,
-        DelayedDespawn::after(0.4),
+        ScaleFadeVfx::new(0.4),
     ));
 
     entity
@@ -104,29 +149,26 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
 
     commands.entity(entity).with_children(|parent| {
         let flying = parent
-            .spawn_substate(entity, (Name::new("Flying"), InvokedBy(entity)))
+            .spawn_diesel_substate(entity, Name::new("Flying"))
             .id();
 
         parent.spawn_subeffect(
             flying,
-            entity,
             (
                 Name::new("SpawnExplosion"),
-                SpawnConfig::at_passed("explosion"),
+                SpawnConfig::passed("explosion"),
             ),
         );
 
         let life_targeting = parent
             .spawn_subeffect(
                 flying,
-                entity,
                 (Name::new("DecrementLife"), TargetMutator::root()),
             )
             .id();
 
         parent.spawn_subeffect(
             life_targeting,
-            entity,
             (
                 Name::new("DecrementLifeInstant"),
                 bevy_diesel::bevy_gauge::instant! { "ProjectileLife" -= 1.0 },
@@ -134,7 +176,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
         );
 
         let done = parent
-            .spawn_substate(
+            .spawn_diesel_substate(
                 entity,
                 (Name::new("Done"), StateComponent(DelayedDespawn::now())),
             )
@@ -176,15 +218,14 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
-        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
+        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
+        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
 
         parent.spawn_subeffect(
             invoke,
-            entity,
             (
                 Name::new("SpawnProjectile"),
-                SpawnConfig::at_invoker("explosive_projectile")
+                SpawnConfig::invoker("explosive_projectile")
                     .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
                     .with_target_generator(TargetGenerator::at_invoker_target()),
             ),
@@ -211,17 +252,21 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let repeating = parent
-            .spawn_substate(entity, (Name::new("Repeating"), Repeater::new(60)))
+        // Repeater: 3 volleys, 500ms between each
+        let repeater = parent
+            .spawn_diesel_substate(entity, (Name::new("Repeater"), Repeater::new(3)))
+            .id();
+
+        let idle = parent
+            .spawn_diesel_substate(repeater, Name::new("Idle"))
             .id();
 
         let spawn_wave = parent
-            .spawn_substate(
-                entity,
+            .spawn_diesel_substate(
+                repeater,
                 (
                     Name::new("SpawnWave"),
-                    InvokedBy(entity),
-                    SpawnConfig::at_root("explosive_projectile").with_gatherer(
+                    SpawnConfig::root("explosive_projectile").with_gatherer(
                         AvianGatherer::Circle {
                             radius: 4.0,
                             count: NumberType::Fixed(30),
@@ -231,20 +276,27 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
             )
             .id();
 
+        // Idle → SpawnWave (driven by OnRepeat from the repeater system)
+        parent.spawn_transition::<OnRepeat>(idle, spawn_wave);
+        // SpawnWave → Repeater (self-transition, triggers Changed<Active> for next cycle)
+        parent
+            .spawn_transition_always(spawn_wave, repeater)
+            .with_delay(Duration::from_millis(500));
+
+        // When repeater exhausts, OnComplete transitions to Done
         let done = parent
-            .spawn_substate(
+            .spawn_diesel_substate(
                 entity,
                 (Name::new("Done"), StateComponent(DelayedDespawn::now())),
             )
             .id();
 
-        parent.spawn_transition::<OnRepeat>(repeating, spawn_wave);
-        parent
-            .spawn_transition_always(spawn_wave, repeating)
-            .with_delay(Duration::from_millis(50));
-        parent.spawn_transition::<OnComplete>(repeating, done);
+        parent.spawn_transition::<OnComplete>(repeater, done);
 
         let commands = parent.commands_mut();
+        commands
+            .entity(repeater)
+            .insert(InitialState(idle));
         commands
             .entity(entity)
             .insert((
@@ -252,7 +304,7 @@ fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> E
                 FirestormZoneMarker,
                 Visibility::Inherited,
             ))
-            .init_state_machine(repeating);
+            .init_state_machine(repeater);
     });
 
     entity
@@ -266,15 +318,14 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
     let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
 
     commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
-        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
+        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
+        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
 
         parent.spawn_subeffect(
             invoke,
-            entity,
             (
                 Name::new("SpawnZone"),
-                SpawnConfig::at_passed("firestorm_zone")
+                SpawnConfig::passed("firestorm_zone")
                     .with_offset(Vec3Offset::Fixed(Vec3::new(0.0, 8.0, 0.0))),
             ),
         );
@@ -412,7 +463,7 @@ fn update_cursor_target(
 fn invoke_abilities(
     mouse: Res<ButtonInput<MouseButton>>,
     q_player: Query<(&PlayerAbilities, &InvokerTarget)>,
-    mut commands: Commands,
+    mut writer: MessageWriter<StartInvoke>,
 ) {
     let Ok((abilities, invoker_target)) = q_player.single() else {
         return;
@@ -421,12 +472,12 @@ fn invoke_abilities(
     let target = Target::position(invoker_target.position);
 
     if mouse.just_pressed(MouseButton::Left) {
-        commands.trigger(StartInvoke::new(abilities.fireball, vec![target]));
+        writer.write(StartInvoke::new(abilities.fireball, target));
         info!("Fireball → {:.1}", invoker_target.position);
     }
 
     if mouse.just_pressed(MouseButton::Right) {
-        commands.trigger(StartInvoke::new(abilities.firestorm, vec![target]));
+        writer.write(StartInvoke::new(abilities.firestorm, target));
         info!("Firestorm → {:.1}", invoker_target.position);
     }
 }
@@ -517,7 +568,12 @@ fn main() {
         .add_systems(Startup, (setup, setup_assets, register_templates))
         .add_systems(
             Update,
-            (update_cursor_target, invoke_abilities, attach_visuals),
+            (
+                update_cursor_target,
+                invoke_abilities,
+                attach_visuals,
+                scale_fade_system,
+            ),
         )
         .run();
 }

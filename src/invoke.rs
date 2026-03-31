@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_gearbox::SimpleTransition;
+use bevy_gearbox::{AcceptAll, Active, GearboxMessage};
 
 /// Ability marker. Requires `InvokeStatus`.
 #[derive(Component, Default, Reflect)]
@@ -20,24 +20,26 @@ impl Default for InvokeStatus {
 }
 
 /// Fired when an ability invocation completes.
-#[derive(SimpleTransition, EntityEvent, Reflect, Clone)]
+#[derive(Message, Reflect, Clone)]
 pub struct InvocationComplete {
-    #[event_target]
     pub target: Entity,
+}
+
+impl GearboxMessage for InvocationComplete {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.target }
 }
 
 /// Re-triggers invocation on state entry if still held (`TryInvoke`).
 pub fn check_should_reinvoke_ability(
-    enter_state: On<bevy_gearbox::EnterState>,
+    q_newly_active: Query<&Active, Added<Active>>,
     mut q_ability: Query<&mut InvokeStatus>,
 ) {
-    let ability_entity = enter_state.state_machine;
-    let Ok(mut invoke_status) = q_ability.get_mut(ability_entity) else {
-        return;
-    };
-
-    if *invoke_status == InvokeStatus::TryInvoke {
-        // Force change detection so downstream Changed<InvokeStatus> queries pick it up
-        invoke_status.set_changed();
+    for active in &q_newly_active {
+        if let Ok(mut invoke_status) = q_ability.get_mut(active.machine) {
+            if *invoke_status == InvokeStatus::TryInvoke {
+                invoke_status.set_changed();
+            }
+        }
     }
 }

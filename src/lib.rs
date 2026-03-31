@@ -4,7 +4,6 @@ pub mod despawn;
 pub mod dot;
 pub mod effect;
 pub mod events;
-pub mod filters;
 pub mod gauge;
 pub mod gearbox;
 pub mod invoke;
@@ -21,7 +20,25 @@ pub use bevy_gauge;
 pub use bevy_gearbox;
 pub use inventory;
 
+/// System sets for ordering diesel's effect pipeline in [`Update`].
+///
+/// ```text
+/// GearboxSet          ← state machine resolution + side effect production
+///     ↓
+/// DieselPropagation   ← propagate_system: reads GoOffOrigin, walks tree, writes GoOff
+///     ↓
+/// DieselEffects       ← leaf systems: print, spawn, despawn, modifiers, etc.
+/// ```
+#[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DieselSet {
+    /// Propagation: reads [`GoOffOrigin`], writes [`GoOff`] for every descendant.
+    Propagation,
+    /// Leaf effect systems that consume [`GoOff`].
+    Effects,
+}
+
 pub mod prelude {
+    pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
     pub use crate::effect::{GoOff, SubEffectOf, SubEffects};
@@ -31,30 +48,26 @@ pub mod prelude {
     pub use crate::print::PrintLn;
     pub use crate::spawn::{
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
-        SpawnConfig, TemplateRegistry, spawn_observer,
-        on_spawn_invoker, on_spawn_origin, on_spawn_target,
-    };
-    pub use crate::filters::{
-        CollisionFilter, Collides, NumberType, limit_count, sort_by_distance,
+        SpawnConfig, TemplateRegistry, spawn_system,
     };
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
-    pub use crate::gearbox::repeater::{OnComplete, Repeater, template_repeater};
+    pub use crate::gearbox::repeater::{OnComplete, Repeater, repeater_tick};
     pub use crate::gearbox::templates::apply_sub_effect;
-    pub use bevy_gearbox::{SimpleTransition, RegistrationAppExt};
+    pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
-        AlwaysEdge, Delay, EnterState, EventEdge, ExitState,
+        AlwaysEdge, Delay, MessageEdge,
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
         SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
-        GuardProvider,
+        GuardProvider, WriteMessageExt,
+        GearboxSet, EnterState, ExitState, Active,
     };
-    pub use bevy_gearbox::transitions::{NoEvent, TransitionEvent, EventValidator};
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
         RegisterPropagationTarget, PropagationRegistrar,
         register_propagation_for, propagate_event,
     };
-    pub use crate::subeffects::SpawnSubEffect;
+    pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};
     pub use crate::submit_propagation_for;
     pub use crate::despawn::{QueueDespawn, DelayedDespawn};
     pub use crate::invoke::{Ability, InvokeStatus, InvocationComplete, check_should_reinvoke_ability};

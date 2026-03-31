@@ -5,10 +5,9 @@ use std::fmt::Debug;
 
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy_gearbox::transitions::TransitionEvent;
+use bevy_gearbox::{AcceptAll, GearboxMessage, Matched, SideEffect};
 
-use crate::effect::GoOff;
-use crate::gearbox::repeater::Repeatable;
+use crate::effect::GoOffOrigin;
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
@@ -24,51 +23,20 @@ impl<T: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'sta
 // ---------------------------------------------------------------------------
 
 /// Emitted by the repeater on each iteration.
-#[derive(EntityEvent, Clone, Debug, Reflect)]
+#[derive(Message, Clone, Debug)]
 pub struct OnRepeat<P: PosBound> {
-    #[event_target]
     pub entity: Entity,
-    #[reflect(ignore)]
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
+}
+
+impl<P: PosBound> GearboxMessage for OnRepeat<P> {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> OnRepeat<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> TransitionEvent for OnRepeat<P> {
-    type ExitEvent = bevy_gearbox::NoEvent;
-    type EdgeEvent = bevy_gearbox::NoEvent;
-    type EntryEvent = GoOff<P>;
-    type Validator = bevy_gearbox::AcceptAll;
-
-    fn to_entry_event(
-        &self,
-        entering: Entity,
-        _exiting: Entity,
-        _edge: Entity,
-    ) -> Option<GoOff<P>> {
-        Some(GoOff::new(entering, self.targets.clone()))
-    }
-}
-
-impl<P: PosBound> Repeatable for OnRepeat<P> {
-    fn repeat_tick(entity: Entity) -> Self {
-        Self {
-            entity,
-            targets: Vec::new(),
-        }
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for OnRepeat<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -77,42 +45,20 @@ impl<P: PosBound> From<Vec<Target<P>>> for OnRepeat<P> {
 // ---------------------------------------------------------------------------
 
 /// Triggers an ability invocation with the invoker's current targets.
-#[derive(EntityEvent, Clone, Debug, Reflect)]
+#[derive(Message, Clone, Debug)]
 pub struct StartInvoke<P: PosBound> {
-    #[event_target]
     pub entity: Entity,
-    #[reflect(ignore)]
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
+}
+
+impl<P: PosBound> GearboxMessage for StartInvoke<P> {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> StartInvoke<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> TransitionEvent for StartInvoke<P> {
-    type ExitEvent = bevy_gearbox::NoEvent;
-    type EdgeEvent = bevy_gearbox::NoEvent;
-    type EntryEvent = GoOff<P>;
-    type Validator = bevy_gearbox::AcceptAll;
-
-    fn to_entry_event(
-        &self,
-        entering: Entity,
-        _exiting: Entity,
-        _edge: Entity,
-    ) -> Option<GoOff<P>> {
-        Some(GoOff::new(entering, self.targets.clone()))
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -121,42 +67,20 @@ impl<P: PosBound> From<Vec<Target<P>>> for StartInvoke<P> {
 // ---------------------------------------------------------------------------
 
 /// Stops a held or channeled ability invocation.
-#[derive(EntityEvent, Clone, Debug, Reflect)]
+#[derive(Message, Clone, Debug)]
 pub struct StopInvoke<P: PosBound> {
-    #[event_target]
     pub entity: Entity,
-    #[reflect(ignore)]
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
+}
+
+impl<P: PosBound> GearboxMessage for StopInvoke<P> {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> StopInvoke<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> TransitionEvent for StopInvoke<P> {
-    type ExitEvent = bevy_gearbox::NoEvent;
-    type EdgeEvent = bevy_gearbox::NoEvent;
-    type EntryEvent = GoOff<P>;
-    type Validator = bevy_gearbox::AcceptAll;
-
-    fn to_entry_event(
-        &self,
-        entering: Entity,
-        _exiting: Entity,
-        _edge: Entity,
-    ) -> Option<GoOff<P>> {
-        Some(GoOff::new(entering, self.targets.clone()))
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for StopInvoke<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -165,42 +89,20 @@ impl<P: PosBound> From<Vec<Target<P>>> for StopInvoke<P> {
 // ---------------------------------------------------------------------------
 
 /// Collision with an entity target.
-#[derive(EntityEvent, Clone, Debug, Reflect)]
+#[derive(Message, Clone, Debug)]
 pub struct CollidedEntity<P: PosBound> {
-    #[event_target]
     pub entity: Entity,
-    #[reflect(ignore)]
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
+}
+
+impl<P: PosBound> GearboxMessage for CollidedEntity<P> {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> CollidedEntity<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
-    }
-}
-
-impl<P: PosBound> TransitionEvent for CollidedEntity<P> {
-    type ExitEvent = bevy_gearbox::NoEvent;
-    type EdgeEvent = bevy_gearbox::NoEvent;
-    type EntryEvent = GoOff<P>;
-    type Validator = bevy_gearbox::AcceptAll;
-
-    fn to_entry_event(
-        &self,
-        entering: Entity,
-        _exiting: Entity,
-        _edge: Entity,
-    ) -> Option<GoOff<P>> {
-        Some(GoOff::new(entering, self.targets.clone()))
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for CollidedEntity<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
-        }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
@@ -209,41 +111,35 @@ impl<P: PosBound> From<Vec<Target<P>>> for CollidedEntity<P> {
 // ---------------------------------------------------------------------------
 
 /// Collision with a contact point position.
-#[derive(EntityEvent, Clone, Debug, Reflect)]
+#[derive(Message, Clone, Debug)]
 pub struct CollidedPosition<P: PosBound> {
-    #[event_target]
     pub entity: Entity,
-    #[reflect(ignore)]
-    pub targets: Vec<Target<P>>,
+    pub target: Target<P>,
+}
+
+impl<P: PosBound> GearboxMessage for CollidedPosition<P> {
+    type Validator = AcceptAll;
+    fn machine(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> CollidedPosition<P> {
-    pub fn new(entity: Entity, targets: Vec<Target<P>>) -> Self {
-        Self { entity, targets }
+    pub fn new(entity: Entity, target: Target<P>) -> Self {
+        Self { entity, target }
     }
 }
 
-impl<P: PosBound> TransitionEvent for CollidedPosition<P> {
-    type ExitEvent = bevy_gearbox::NoEvent;
-    type EdgeEvent = bevy_gearbox::NoEvent;
-    type EntryEvent = GoOff<P>;
-    type Validator = bevy_gearbox::AcceptAll;
+// ---------------------------------------------------------------------------
+// SideEffect impls: all diesel transition messages produce GoOffOrigin<P>
+// ---------------------------------------------------------------------------
 
-    fn to_entry_event(
-        &self,
-        entering: Entity,
-        _exiting: Entity,
-        _edge: Entity,
-    ) -> Option<GoOff<P>> {
-        Some(GoOff::new(entering, self.targets.clone()))
-    }
-}
-
-impl<P: PosBound> From<Vec<Target<P>>> for CollidedPosition<P> {
-    fn from(value: Vec<Target<P>>) -> Self {
-        Self {
-            entity: Entity::PLACEHOLDER,
-            targets: value,
+macro_rules! impl_go_off_side_effect {
+    ($($Msg:ident),*) => {$(
+        impl<P: PosBound> SideEffect<$Msg<P>> for GoOffOrigin<P> {
+            fn produce(matched: &Matched<$Msg<P>>) -> Option<Self> {
+                Some(GoOffOrigin::new(matched.target, matched.message.target))
+            }
         }
-    }
+    )*};
 }
+
+impl_go_off_side_effect!(OnRepeat, StartInvoke, StopInvoke, CollidedEntity, CollidedPosition);
