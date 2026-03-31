@@ -1,6 +1,6 @@
 [workspace]
-members = [
-  "backends/diesel_avian3d",
+members = ["backends/diesel_avian2d",
+  "backends/diesel_avian3d", "backends/diesel_grid2d", "backends/diesel_monster",
   "crates/diesel",
   "crates/gauge/core",
   "crates/gauge/macros",

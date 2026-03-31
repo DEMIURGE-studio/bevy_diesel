@@ -156,7 +156,7 @@ fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>
             flying,
             (
                 Name::new("SpawnExplosion"),
-                SpawnConfig::at_passed("explosion"),
+                SpawnConfig::passed("explosion"),
             ),
         );
 
@@ -225,9 +225,9 @@ fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) ->
             invoke,
             (
                 Name::new("SpawnProjectile"),
-                SpawnConfig::at_invoker("explosive_projectile")
+                SpawnConfig::invoker("explosive_projectile")
                     .with_offset(Vec3Offset::Fixed(Vec3::Y * 1.5))
-                    .with_target_generator(TargetGenerator::at_invoker_target()),
+                    .with_target_generator(TargetGenerator::invoker_target()),
             ),
         );
 
@@ -325,7 +325,7 @@ fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -
             invoke,
             (
                 Name::new("SpawnZone"),
-                SpawnConfig::at_passed("firestorm_zone")
+                SpawnConfig::passed("firestorm_zone")
                     .with_offset(Vec3Offset::Fixed(Vec3::new(0.0, 8.0, 0.0))),
             ),
         );

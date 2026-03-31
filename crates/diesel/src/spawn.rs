@@ -81,21 +81,6 @@ impl<B: SpatialBackend> SpawnConfig<B> {
     pub fn passed(template_id: &str) -> Self {
         Self::new(template_id, TargetType::Passed)
     }
-    pub fn at_position(template_id: &str, position: B::Pos) -> Self {
-        Self::new(template_id, TargetType::Position(position))
-    }
-    pub fn at_invoker(template_id: &str) -> Self {
-        Self::invoker(template_id)
-    }
-    pub fn at_target(template_id: &str) -> Self {
-        Self::target(template_id)
-    }
-    pub fn at_root(template_id: &str) -> Self {
-        Self::root(template_id)
-    }
-    pub fn at_passed(template_id: &str) -> Self {
-        Self::passed(template_id)
-    }
     pub fn at_zero(template_id: &str) -> Self
     where
         B::Pos: Default,

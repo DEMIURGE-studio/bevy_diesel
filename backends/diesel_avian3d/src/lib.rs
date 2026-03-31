@@ -19,12 +19,12 @@ pub mod prelude {
         calculate_high_angle_velocity_with_speed, calculate_low_angle_velocity_with_speed,
         calculate_velocity_with_speed, distance_lock,
     };
-    pub use crate::collision::CollisionFilterPlugin;
+    pub use crate::collision::{CollisionFilter, CollisionFilterPlugin, Collides};
     pub use crate::projectile::{
         LinearProjectile, LinearProjectileEffect, ProjectileEffect, ProjectilePlugin,
     };
     pub use crate::velocity::{Trajectory, VelocityEffect, VelocityEffectPlugin};
-    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, Vec3Offset};
+    pub use crate::{AvianBackend, AvianFilter, AvianGatherer, NumberType, Vec3Offset};
     pub use bevy_diesel::prelude::*;
 
     // Vec3 type aliases
@@ -159,7 +159,7 @@ impl SpatialBackend for AvianBackend {
                     exclude,
                     &ctx.transforms,
                 );
-                sort_by_distance::<AvianBackend>(&mut targets, &origin);
+                sort_by_distance(&mut targets, &origin);
                 targets
             }
         }
@@ -167,7 +167,7 @@ impl SpatialBackend for AvianBackend {
 
     fn apply_filter(
         ctx: &mut AvianContext,
-        mut targets: Vec<bevy_diesel::target::Target<Vec3>>,
+        targets: Vec<bevy_diesel::target::Target<Vec3>>,
         filter: &AvianFilter,
         _invoker: Entity,
         _origin: Vec3,
@@ -175,11 +175,7 @@ impl SpatialBackend for AvianBackend {
         // TODO: line_of_sight filtering using ctx.spatial_query
 
         // Count limiting
-        if let Some(count) = &filter.count {
-            targets = limit_count(targets, count, &mut ctx.rng);
-        }
-
-        targets
+        limit_count(targets, &filter.count, &mut ctx.rng)
     }
 
     fn spawn_transform(
@@ -283,8 +279,8 @@ pub enum AvianGatherer {
 /// Post-gather filter config.
 #[derive(Clone, Debug)]
 pub struct AvianFilter {
-    /// Max target count.
-    pub count: Option<NumberType>,
+    /// Max target count. `NumberType::All` passes everything through.
+    pub count: NumberType,
     /// Require line-of-sight (TODO).
     pub line_of_sight: bool,
 }
@@ -292,7 +288,7 @@ pub struct AvianFilter {
 impl Default for AvianFilter {
     fn default() -> Self {
         Self {
-            count: None,
+            count: NumberType::All,
             line_of_sight: false,
         }
     }
@@ -434,4 +430,95 @@ fn random_in_circle(rng: &mut dyn RngCore, radius: f32) -> Vec2 {
             return v * radius;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// NumberType - count: fixed, random range, or unlimited
+// ---------------------------------------------------------------------------
+
+/// Count specification: fixed, random range, or all (no limit).
+#[derive(Clone, Debug)]
+pub enum NumberType {
+    All,
+    Fixed(usize),
+    Random(usize, usize),
+}
+
+impl Default for NumberType {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl NumberType {
+    /// Resolve to a concrete count. Panics on `All` — use only for gatherers
+    /// where a count is always required.
+    pub fn resolve(&self, rng: &mut dyn RngCore) -> usize {
+        match self {
+            NumberType::All => panic!("NumberType::All has no concrete count"),
+            NumberType::Fixed(n) => *n,
+            NumberType::Random(min, max) => {
+                if min >= max {
+                    return *min;
+                }
+                let range = max - min + 1;
+                let r = (rng.next_u64() as usize) % range;
+                min + r
+            }
+        }
+    }
+
+    /// Resolve to a concrete count, or `None` for unlimited.
+    fn resolve_limit(&self, rng: &mut dyn RngCore) -> Option<usize> {
+        match self {
+            NumberType::All => None,
+            _ => Some(self.resolve(rng)),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Filter utilities
+// ---------------------------------------------------------------------------
+
+/// Limit targets via reservoir sampling.
+fn limit_count(
+    targets: Vec<bevy_diesel::target::Target<Vec3>>,
+    number: &NumberType,
+    rng: &mut dyn RngCore,
+) -> Vec<bevy_diesel::target::Target<Vec3>> {
+    let max_count = match number.resolve_limit(rng) {
+        Some(n) => n,
+        None => return targets,
+    };
+
+    if targets.len() <= max_count {
+        return targets;
+    }
+
+    // Reservoir sampling
+    let mut selected = Vec::with_capacity(max_count);
+    for (i, target) in targets.into_iter().enumerate() {
+        if selected.len() < max_count {
+            selected.push(target);
+        } else {
+            let r = (rng.next_u64() as usize) % (i + 1);
+            if r < max_count {
+                selected[r] = target;
+            }
+        }
+    }
+    selected
+}
+
+/// Sort targets by distance (nearest first).
+fn sort_by_distance(
+    targets: &mut [bevy_diesel::target::Target<Vec3>],
+    origin: &Vec3,
+) {
+    targets.sort_by(|a, b| {
+        let dist_a = a.position.distance(*origin);
+        let dist_b = b.position.distance(*origin);
+        dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+    });
 }

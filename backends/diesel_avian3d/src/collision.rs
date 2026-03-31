@@ -1,7 +1,44 @@
+use std::fmt::Debug;
+
 use avian3d::prelude::{CollisionStart, Collisions, Position};
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
+
+// ---------------------------------------------------------------------------
+// CollisionFilter trait + Collides marker
+// ---------------------------------------------------------------------------
+
+/// Determines whether an ability can affect a target entity.
+///
+/// `Self` goes on the ability entity, `Self::Lookup` is queried on invoker/target.
+///
+/// ```ignore
+/// impl CollisionFilter for Faction {
+///     type Lookup = Alliance;
+///     fn can_target(&self, invoker: Option<&Alliance>, target: Option<&Alliance>) -> bool {
+///         match (self, invoker, target) {
+///             (Faction::Enemies, Some(i), Some(t)) => i.0 != t.0,
+///             _ => true,
+///         }
+///     }
+/// }
+/// ```
+pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
+    /// Component queried on invoker and target entities.
+    type Lookup: Component;
+
+    /// Return `true` if the ability should affect this target.
+    fn can_target(
+        &self,
+        invoker_data: Option<&Self::Lookup>,
+        target_data: Option<&Self::Lookup>,
+    ) -> bool;
+}
+
+/// Marker: every collision fires an event, no filtering.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Collides;
 
 // ---------------------------------------------------------------------------
 // Unfiltered collision system - fires for any entity with `Collides` marker

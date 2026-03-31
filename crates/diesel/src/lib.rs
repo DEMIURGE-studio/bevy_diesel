@@ -4,7 +4,6 @@ pub mod despawn;
 pub mod dot;
 pub mod effect;
 pub mod events;
-pub mod filters;
 pub mod gauge;
 pub mod gearbox;
 pub mod invoke;
@@ -50,9 +49,6 @@ pub mod prelude {
     pub use crate::spawn::{
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
         SpawnConfig, TemplateRegistry, spawn_observer,
-    };
-    pub use crate::filters::{
-        CollisionFilter, Collides, NumberType, limit_count, sort_by_distance,
     };
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
