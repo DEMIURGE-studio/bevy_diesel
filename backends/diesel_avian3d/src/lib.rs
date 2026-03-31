@@ -4,8 +4,7 @@ use bevy::prelude::*;
 use rand::RngCore;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::bevy_gauge::prelude::AttributeResolvable;
-use bevy_diesel::bevy_gauge::attributes::Attributes;
+use bevy_diesel::bevy_gauge::AttributeResolvable;
 
 // Re-exports
 
@@ -209,8 +208,9 @@ impl SpatialBackend for AvianBackend {
 // Vec3Offset
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AttributeResolvable)]
 pub struct DirectionOffset {
+    #[skip]
     pub direction: Dir3,
     pub magnitude: f32,
 }
@@ -224,18 +224,8 @@ impl DirectionOffset {
     }
 }
 
-impl AttributeResolvable for DirectionOffset {
-    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
-        self.magnitude.should_resolve(&format!("{prefix}.magnitude"), attrs)
-    }
-
-    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
-        self.magnitude.resolve(&format!("{prefix}.magnitude"), attrs);
-    }
-}
-
 /// Offset configuration for 3D space.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AttributeResolvable)]
 pub enum Vec3Offset {
     None,
     Fixed(DirectionOffset),
@@ -250,42 +240,6 @@ pub enum Vec3Offset {
 impl Default for Vec3Offset {
     fn default() -> Self {
         Self::None
-    }
-}
-
-impl AttributeResolvable for Vec3Offset {
-    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
-        match self {
-            Self::None => false,
-            Self::Fixed(offset) => offset.should_resolve(prefix, attrs),
-            Self::RandomBetween { min, max } => {
-                min.should_resolve(&format!("{prefix}.min"), attrs)
-                    || max.should_resolve(&format!("{prefix}.max"), attrs)
-            }
-            Self::RandomInSphere(radius) => {
-                radius.should_resolve(&format!("{prefix}.radius"), attrs)
-            }
-            Self::RandomInCircle(radius) => {
-                radius.should_resolve(&format!("{prefix}.radius"), attrs)
-            }
-        }
-    }
-
-    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
-        match self {
-            Self::None => {}
-            Self::Fixed(offset) => offset.resolve(prefix, attrs),
-            Self::RandomBetween { min, max } => {
-                min.resolve(&format!("{prefix}.min"), attrs);
-                max.resolve(&format!("{prefix}.max"), attrs);
-            }
-            Self::RandomInSphere(radius) => {
-                radius.resolve(&format!("{prefix}.radius"), attrs);
-            }
-            Self::RandomInCircle(radius) => {
-                radius.resolve(&format!("{prefix}.radius"), attrs);
-            }
-        }
     }
 }
 
@@ -313,7 +267,7 @@ fn apply_vec3_offset(offset: &Vec3Offset, rng: &mut dyn RngCore) -> Vec3 {
 
 /// Gatherer variants for 3D space.
 /// Position generators embed count; entity gatherers defer count limiting to filters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AttributeResolvable)]
 pub enum AvianGatherer {
     // Position generators - produce N random points around origin
     Sphere {
@@ -325,10 +279,12 @@ pub enum AvianGatherer {
         count: NumberType,
     },
     Box {
+        #[skip]
         half_extents: Vec3,
         count: NumberType,
     },
     Line {
+        #[skip]
         direction: Vec3,
         length: f32,
         count: NumberType,
@@ -345,64 +301,17 @@ pub enum AvianGatherer {
     AllEntitiesInRadius(f32),
 }
 
-impl AttributeResolvable for AvianGatherer {
-    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
-        match self {
-            Self::Sphere { radius, count }
-            | Self::Circle { radius, count } => {
-                radius.should_resolve(&format!("{prefix}.radius"), attrs)
-                    || count.should_resolve(&format!("{prefix}.count"), attrs)
-            }
-            Self::Box { half_extents: _, count } => {
-                count.should_resolve(&format!("{prefix}.count"), attrs)
-            }
-            Self::Line { direction: _, length, count } => {
-                length.should_resolve(&format!("{prefix}.length"), attrs)
-                    || count.should_resolve(&format!("{prefix}.count"), attrs)
-            }
-            Self::EntitiesInSphere(radius)
-            | Self::EntitiesInCircle(radius)
-            | Self::NearestEntities(radius)
-            | Self::AllEntitiesInRadius(radius) => {
-                radius.should_resolve(&format!("{prefix}.radius"), attrs)
-            }
-        }
-    }
-
-    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
-        match self {
-            Self::Sphere { radius, count }
-            | Self::Circle { radius, count } => {
-                radius.resolve(&format!("{prefix}.radius"), attrs);
-                count.resolve(&format!("{prefix}.count"), attrs);
-            }
-            Self::Box { half_extents: _, count } => {
-                count.resolve(&format!("{prefix}.count"), attrs);
-            }
-            Self::Line { direction: _, length, count } => {
-                length.resolve(&format!("{prefix}.length"), attrs);
-                count.resolve(&format!("{prefix}.count"), attrs);
-            }
-            Self::EntitiesInSphere(radius)
-            | Self::EntitiesInCircle(radius)
-            | Self::NearestEntities(radius)
-            | Self::AllEntitiesInRadius(radius) => {
-                radius.resolve(&format!("{prefix}.radius"), attrs);
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // AvianFilter
 // ---------------------------------------------------------------------------
 
 /// Post-gather filter config.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AttributeResolvable)]
 pub struct AvianFilter {
     /// Max target count. `NumberType::All` passes everything through.
     pub count: NumberType,
     /// Require line-of-sight (TODO).
+    #[skip]
     pub line_of_sight: bool,
 }
 
@@ -412,16 +321,6 @@ impl Default for AvianFilter {
             count: NumberType::All,
             line_of_sight: false,
         }
-    }
-}
-
-impl AttributeResolvable for AvianFilter {
-    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
-        self.count.should_resolve(&format!("{prefix}.count"), attrs)
-    }
-
-    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
-        self.count.resolve(&format!("{prefix}.count"), attrs);
     }
 }
 
@@ -573,11 +472,11 @@ fn random_in_circle(rng: &mut dyn RngCore, radius: f32) -> Vec2 {
 // ---------------------------------------------------------------------------
 
 /// Count specification: fixed, random range, or all (no limit).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, AttributeResolvable)]
 pub enum NumberType {
     All,
     Fixed(usize),
-    Random(usize, usize),
+    Random { min: usize, max: usize },
 }
 
 impl Default for NumberType {
@@ -586,38 +485,14 @@ impl Default for NumberType {
     }
 }
 
-impl AttributeResolvable for NumberType {
-    fn should_resolve(&self, prefix: &str, attrs: &Attributes) -> bool {
-        match self {
-            Self::All => false,
-            Self::Fixed(n) => n.should_resolve(prefix, attrs),
-            Self::Random(min, max) => {
-                min.should_resolve(&format!("{prefix}.min"), attrs)
-                    || max.should_resolve(&format!("{prefix}.max"), attrs)
-            }
-        }
-    }
-
-    fn resolve(&mut self, prefix: &str, attrs: &Attributes) {
-        match self {
-            Self::All => {}
-            Self::Fixed(n) => n.resolve(prefix, attrs),
-            Self::Random(min, max) => {
-                min.resolve(&format!("{prefix}.min"), attrs);
-                max.resolve(&format!("{prefix}.max"), attrs);
-            }
-        }
-    }
-}
-
 impl NumberType {
-    /// Resolve to a concrete count. Panics on `All` — use only for gatherers
+    /// Resolve to a concrete count. Panics on `All`. Use only for gatherers
     /// where a count is always required.
     pub fn resolve_count(&self, rng: &mut dyn RngCore) -> usize {
         match self {
             NumberType::All => panic!("NumberType::All has no concrete count"),
             NumberType::Fixed(n) => *n,
-            NumberType::Random(min, max) => {
+            NumberType::Random { min, max } => {
                 if min >= max {
                     return *min;
                 }
