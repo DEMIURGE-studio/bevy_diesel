@@ -5,11 +5,32 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 
+use bevy_gauge::prelude::AttributesMut;
+
 use crate::backend::SpatialBackend;
 use crate::effect::{GoOff, GoOffOrigin};
+use crate::invoke::Ability;
 use crate::invoker::InvokedBy;
 use crate::pipeline::generate_targets;
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
+
+/// Walk the `InvokedBy` chain and return the first ancestor with `Ability`.
+fn find_ability(
+    entity: Entity,
+    q_invoker: &Query<&InvokedBy>,
+    q_ability: &Query<(), With<Ability>>,
+) -> Option<Entity> {
+    let mut current = entity;
+    loop {
+        if q_ability.get(current).is_ok() {
+            return Some(current);
+        }
+        let Ok(invoked_by) = q_invoker.get(current) else {
+            return None;
+        };
+        current = invoked_by.0;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // TemplateRegistry
@@ -179,9 +200,11 @@ pub fn spawn_system<B: SpatialBackend>(
     q_invoker: Query<&InvokedBy>,
     q_child_of: Query<&ChildOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
+    q_ability: Query<(), With<Ability>>,
     template_registry: Res<TemplateRegistry>,
     mut ctx: B::Context<'_, '_>,
     mut commands: Commands,
+    mut attributes: AttributesMut,
     mut spawn_target_writer: MessageWriter<OnSpawnTarget<B::Pos>>,
     mut spawn_origin_writer: MessageWriter<OnSpawnOrigin<B::Pos>>,
     mut spawn_invoker_writer: MessageWriter<OnSpawnInvoker<B::Pos>>,
@@ -262,6 +285,15 @@ pub fn spawn_system<B: SpatialBackend>(
                 &mut commands,
                 Some(spawned_entity),
             );
+
+            // Register gauge sources for cross-entity attribute expressions.
+            // The aliases are stored in the DependencyGraph immediately; when
+            // Attributes + modifiers are applied later (during command flush),
+            // expressions like "Damage@root" or "Cooldown@ability" will resolve.
+            attributes.register_source(spawned_entity, "root", root);
+            if let Some(ability) = find_ability(effect_entity, &q_invoker, &q_ability) {
+                attributes.register_source(spawned_entity, "ability", ability);
+            }
 
             match (&target_targets, parent_entity) {
                 (Some(targets), Some(parent)) => {

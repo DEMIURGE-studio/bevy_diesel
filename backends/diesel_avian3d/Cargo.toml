@@ -14,7 +14,6 @@ bevy_diesel = { path = "../.." }
 bevy = "0.18.0"
 avian3d = "0.5"
 rand = "0.9"
-bevy_gearbox = { path = "../../../bevy_gearbox" }
 
 [features]
 default = []

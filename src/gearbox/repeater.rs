@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
+use bevy_gauge::AttributeComponent;
 
 use crate::events::{OnRepeat, PosBound};
-use crate::invoker::InvokedBy;
 use crate::target::Target as DieselTarget;
 
 // ---------------------------------------------------------------------------
@@ -21,10 +19,12 @@ use crate::target::Target as DieselTarget;
 /// written instead so the user can transition away.
 ///
 /// The counter resets when the Repeater gains `Active` (fresh entry from parent).
-#[derive(Component, Clone, Debug, Reflect, Default)]
+#[derive(Component, Clone, Debug, Reflect, Default, AttributeComponent)]
 #[reflect(Component, Default)]
 pub struct Repeater {
+    #[init_from("RepeatCount")]
     pub remaining: u32,
+    #[read("RepeatCount")]
     pub initial: u32,
 }
 
