@@ -59,8 +59,7 @@ pub mod prelude {
         AlwaysEdge, Delay, MessageEdge,
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
         SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
-        GuardProvider, WriteMessageExt,
-        GearboxSet, EnterState, ExitState, Active,
+        GuardProvider, GearboxSet, EnterState, ExitState, Active,
     };
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
