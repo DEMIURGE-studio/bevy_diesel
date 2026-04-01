@@ -24,12 +24,15 @@ impl Plugin for DieselPaePlugin {
             (
                 pae_exit_system.after(GearboxSet),
                 pae_enter_system.after(GearboxSet),
-                stats_change_system,
                 active_effects_watcher_system,
             ),
-        )
-        .add_observer(on_add_effect_target)
-        .add_observer(on_remove_effect_target);
+        );
+        app.add_systems(
+            bevy_gearbox::GearboxSchedule,
+            stats_change_system.in_set(crate::DieselSet::Effects),
+        );
+        app.add_observer(on_add_effect_target)
+            .add_observer(on_remove_effect_target);
     }
 }
 

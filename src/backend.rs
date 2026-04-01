@@ -118,9 +118,21 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.add_plugins(bevy_gearbox::GearboxPlugin);
 
         // Diesel effect pipeline ordering
-        app.configure_sets(Update, (
-            crate::DieselSet::Propagation.after(bevy_gearbox::GearboxSet),
-            crate::DieselSet::Effects.after(crate::DieselSet::Propagation),
+        app.configure_sets(bevy_gearbox::GearboxSchedule, (
+            crate::DieselSet::Propagation
+                .after(bevy_gearbox::GearboxPhase::EntryPhase),
+            crate::DieselSet::Effects
+                .after(crate::DieselSet::Propagation),
+            bevy_gearbox::GearboxPhase::EdgeCheckPhase
+                .after(crate::DieselSet::Effects),
+        ));
+        app.add_systems(bevy_gearbox::GearboxSchedule, (
+            ApplyDeferred
+                .after(crate::DieselSet::Propagation)
+                .before(crate::DieselSet::Effects),
+            ApplyDeferred
+                .after(crate::DieselSet::Effects)
+                .before(bevy_gearbox::GearboxPhase::EdgeCheckPhase),
         ));
 
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)
@@ -138,7 +150,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.register_type::<repeater::Repeater>();
 
         // Despawn
-        app.add_systems(Update, crate::despawn::queue_despawn_system::<B::Pos>.in_set(crate::DieselSet::Effects));
+        app.add_systems(bevy_gearbox::GearboxSchedule, crate::despawn::queue_despawn_system::<B::Pos>.in_set(crate::DieselSet::Effects));
         app.add_systems(PostUpdate, crate::despawn::despawn_queue_system);
         app.register_state_component::<crate::despawn::DelayedDespawn>();
 

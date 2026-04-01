@@ -20,18 +20,21 @@ pub use bevy_gauge;
 pub use bevy_gearbox;
 pub use inventory;
 
-/// System sets for ordering diesel's effect pipeline in [`Update`].
+/// System sets for ordering diesel's effect pipeline inside [`GearboxSchedule`].
+///
+/// These run between [`GearboxPhase::EntryPhase`] and [`GearboxPhase::EdgeCheckPhase`]
+/// so that sub-effects (attribute changes, spawns, etc.) resolve before
+/// always-edge guards are evaluated.
 ///
 /// ```text
-/// GearboxSet          ← state machine resolution + side effect production
-///     ↓
-/// DieselPropagation   ← propagate_system: reads GoOffOrigin, walks tree, writes GoOff
-///     ↓
-/// DieselEffects       ← leaf systems: print, spawn, despawn, modifiers, etc.
+/// GearboxSchedule:
+///   TransitionPhase → ApplyDeferred → ExitPhase → EntryPhase
+///     → DieselPropagation → ApplyDeferred → DieselEffects → ApplyDeferred
+///     → EdgeCheckPhase
 /// ```
 #[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DieselSet {
-    /// Propagation: reads [`GoOffOrigin`], writes [`GoOff`] for every descendant.
+    /// Propagation: reads [`GoOffOrigin`], walks tree, writes [`GoOff`].
     Propagation,
     /// Leaf effect systems that consume [`GoOff`].
     Effects,

@@ -340,13 +340,13 @@ impl Plugin for AvianDieselPlugin {
         app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
 
         // Propagation: reads GoOffOrigin, writes GoOff
-        app.add_systems(Update,
+        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule,
             propagate_observer::<AvianBackend>
                 .in_set(bevy_diesel::DieselSet::Propagation),
         );
 
         // Leaf effect systems: read GoOff
-        app.add_systems(Update, (
+        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule, (
             bevy_diesel::spawn::spawn_system::<AvianBackend>,
             bevy_diesel::print::print_effect::<Vec3>,
             bevy_diesel::gauge::modifiers::modifier_set_system::<Vec3>,
