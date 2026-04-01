@@ -99,7 +99,7 @@ pub struct PAETryApply {
 
 impl GearboxMessage for PAETryApply {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.target }
+    fn target(&self) -> Entity { self.target }
 }
 
 /// Trigger to suspend a PAE: Active → Applied.
@@ -110,7 +110,7 @@ pub struct PAESuspend {
 
 impl GearboxMessage for PAESuspend {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.target }
+    fn target(&self) -> Entity { self.target }
 }
 
 /// Trigger to unapply a PAE: Applied/Active → Unapplied.
@@ -121,7 +121,7 @@ pub struct PAEUnapplyApproved {
 
 impl GearboxMessage for PAEUnapplyApproved {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.target }
+    fn target(&self) -> Entity { self.target }
 }
 
 // ---------------------------------------------------------------------------

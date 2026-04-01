@@ -218,7 +218,7 @@ macro_rules! spawn_event {
             bevy_gearbox::GearboxMessage for $Name<P>
         {
             type Validator = bevy_gearbox::AcceptAll;
-            fn machine(&self) -> Entity {
+            fn target(&self) -> Entity {
                 self.entity
             }
         }

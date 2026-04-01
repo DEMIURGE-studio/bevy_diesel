@@ -27,7 +27,7 @@ pub struct InvocationComplete {
 
 impl GearboxMessage for InvocationComplete {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.target }
+    fn target(&self) -> Entity { self.target }
 }
 
 /// Re-triggers invocation on state entry if still held (`TryInvoke`).

@@ -31,7 +31,7 @@ pub struct OnRepeat<P: PosBound> {
 
 impl<P: PosBound> GearboxMessage for OnRepeat<P> {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn target(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> OnRepeat<P> {
@@ -53,7 +53,7 @@ pub struct StartInvoke<P: PosBound> {
 
 impl<P: PosBound> GearboxMessage for StartInvoke<P> {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn target(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> StartInvoke<P> {
@@ -75,7 +75,7 @@ pub struct StopInvoke<P: PosBound> {
 
 impl<P: PosBound> GearboxMessage for StopInvoke<P> {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn target(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> StopInvoke<P> {
@@ -97,7 +97,7 @@ pub struct CollidedEntity<P: PosBound> {
 
 impl<P: PosBound> GearboxMessage for CollidedEntity<P> {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn target(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> CollidedEntity<P> {
@@ -119,7 +119,7 @@ pub struct CollidedPosition<P: PosBound> {
 
 impl<P: PosBound> GearboxMessage for CollidedPosition<P> {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity { self.entity }
+    fn target(&self) -> Entity { self.entity }
 }
 
 impl<P: PosBound> CollidedPosition<P> {

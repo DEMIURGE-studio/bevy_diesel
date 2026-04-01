@@ -49,7 +49,7 @@ pub struct OnComplete {
 
 impl GearboxMessage for OnComplete {
     type Validator = AcceptAll;
-    fn machine(&self) -> Entity {
+    fn target(&self) -> Entity {
         self.entity
     }
 }

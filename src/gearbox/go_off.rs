@@ -36,7 +36,7 @@ macro_rules! go_off {
 
         impl ::bevy_gearbox::GearboxMessage for $Event {
             type Validator = ::bevy_gearbox::AcceptAll;
-            fn machine(&self) -> ::bevy::prelude::Entity { self.entity }
+            fn target(&self) -> ::bevy::prelude::Entity { self.entity }
         }
 
         impl ::bevy_gearbox::SideEffect<$Event> for $crate::effect::GoOffOrigin<$Pos> {
