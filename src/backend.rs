@@ -181,7 +181,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
 
         // Invoker → gauge source auto-registration
         app.add_observer(crate::invoker::register_invoker_source);
-        app.add_systems(Update, crate::invoker::on_invoked_by_changed_system);
+        app.add_systems(Update, crate::invoker::on_invoker_changed_system);
 
         // Propagation (inventory-based event forwarding)
         crate::propagation::plugin(app);

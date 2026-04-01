@@ -15,3 +15,7 @@ rand = "0.9"
 inventory = "0.3"
 bevy_gauge = { path = "../bevy_gauge" }
 bevy_gearbox = { path = "../bevy_gearbox", features = ["gauge"] }
+
+[features]
+default = []
+server = ["bevy_gearbox/server"]

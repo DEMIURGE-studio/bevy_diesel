@@ -64,17 +64,17 @@ pub(crate) fn register_invoker_source(
 ) {
     let entity = add.entity;
     let invoker = q_invoker.root_ancestor(entity);
-    attributes.register_source(entity, "invoked_by", invoker);
+    attributes.register_source(entity, "invoker", invoker);
 }
 
 /// Update gauge sources when `InvokedBy` changes on entities that have `Attributes`.
-pub(crate) fn on_invoked_by_changed_system(
+pub(crate) fn on_invoker_changed_system(
     q_changed: Query<Entity, (Changed<InvokedBy>, With<Attributes>)>,
     q_invoker: Query<&InvokedBy>,
     mut attributes: AttributesMut,
 ) {
     for entity in q_changed.iter() {
         let invoker = q_invoker.root_ancestor(entity);
-        attributes.register_source(entity, "invoked_by", invoker);
+        attributes.register_source(entity, "invoker", invoker);
     }
 }

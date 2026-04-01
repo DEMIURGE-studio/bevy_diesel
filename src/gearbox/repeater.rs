@@ -88,14 +88,14 @@ pub fn repeater_tick<P: PosBound>(
         if active_ref.is_added() {
             // Initial entry — reset counter, decrement, fire first tick
             repeater.remaining = repeater.initial - 1;
-            writer_repeat.write(OnRepeat::new(active.machine, target));
+            writer_repeat.write(OnRepeat::new(entity, target));
         } else if repeater.remaining > 0 {
             // Re-entry via Apply→Repeater bounce — decrement and fire
             repeater.remaining -= 1;
-            writer_repeat.write(OnRepeat::new(active.machine, target));
+            writer_repeat.write(OnRepeat::new(entity, target));
         } else {
             // Exhausted
-            writer_complete.write(OnComplete::new(active.machine));
+            writer_complete.write(OnComplete::new(entity));
         }
     }
 }

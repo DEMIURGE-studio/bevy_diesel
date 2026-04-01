@@ -208,13 +208,13 @@ where
 
 macro_rules! spawn_event {
     ($Name:ident) => {
-        #[derive(Message, Clone, Debug)]
-        pub struct $Name<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static> {
+        #[derive(Message, Clone, Debug, Reflect)]
+        pub struct $Name<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static> {
             pub entity: Entity,
             pub target: Target<P>,
         }
 
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>
+        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static>
             bevy_gearbox::GearboxMessage for $Name<P>
         {
             type Validator = bevy_gearbox::AcceptAll;
@@ -223,13 +223,13 @@ macro_rules! spawn_event {
             }
         }
 
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static> $Name<P> {
+        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static> $Name<P> {
             pub fn new(entity: Entity, target: Target<P>) -> Self {
                 Self { entity, target }
             }
         }
 
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + 'static>
+        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static>
             bevy_gearbox::SideEffect<$Name<P>> for GoOffOrigin<P>
         {
             fn produce(matched: &bevy_gearbox::Matched<$Name<P>>) -> Option<Self> {

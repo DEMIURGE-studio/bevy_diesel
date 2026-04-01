@@ -39,7 +39,7 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> InvokerTarget<P>
 // ---------------------------------------------------------------------------
 
 /// A resolved target: optionally an entity, always a position.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Reflect)]
 pub struct Target<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Option<Entity>,
     pub position: P,

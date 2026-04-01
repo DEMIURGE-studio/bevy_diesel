@@ -23,7 +23,7 @@ impl<T: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'sta
 // ---------------------------------------------------------------------------
 
 /// Emitted by the repeater on each iteration.
-#[derive(Message, Clone, Debug)]
+#[derive(Message, Clone, Debug, Reflect)]
 pub struct OnRepeat<P: PosBound> {
     pub entity: Entity,
     pub target: Target<P>,
@@ -45,7 +45,7 @@ impl<P: PosBound> OnRepeat<P> {
 // ---------------------------------------------------------------------------
 
 /// Triggers an ability invocation with the invoker's current targets.
-#[derive(Message, Clone, Debug)]
+#[derive(Message, Clone, Debug, Reflect)]
 pub struct StartInvoke<P: PosBound> {
     pub entity: Entity,
     pub target: Target<P>,
@@ -67,7 +67,7 @@ impl<P: PosBound> StartInvoke<P> {
 // ---------------------------------------------------------------------------
 
 /// Stops a held or channeled ability invocation.
-#[derive(Message, Clone, Debug)]
+#[derive(Message, Clone, Debug, Reflect)]
 pub struct StopInvoke<P: PosBound> {
     pub entity: Entity,
     pub target: Target<P>,
@@ -89,7 +89,7 @@ impl<P: PosBound> StopInvoke<P> {
 // ---------------------------------------------------------------------------
 
 /// Collision with an entity target.
-#[derive(Message, Clone, Debug)]
+#[derive(Message, Clone, Debug, Reflect)]
 pub struct CollidedEntity<P: PosBound> {
     pub entity: Entity,
     pub target: Target<P>,
@@ -111,7 +111,7 @@ impl<P: PosBound> CollidedEntity<P> {
 // ---------------------------------------------------------------------------
 
 /// Collision with a contact point position.
-#[derive(Message, Clone, Debug)]
+#[derive(Message, Clone, Debug, Reflect)]
 pub struct CollidedPosition<P: PosBound> {
     pub entity: Entity,
     pub target: Target<P>,

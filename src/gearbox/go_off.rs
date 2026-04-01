@@ -12,6 +12,7 @@ macro_rules! go_off {
     ($Event:ident, $Pos:ty) => {
         #[derive(
             ::bevy::prelude::Message,
+            ::bevy::prelude::Reflect,
             Clone,
             Debug,
         )]
