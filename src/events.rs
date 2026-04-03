@@ -85,50 +85,6 @@ impl<P: PosBound> StopInvoke<P> {
 }
 
 // ---------------------------------------------------------------------------
-// CollidedEntity<P> - collision event carrying entity targets
-// ---------------------------------------------------------------------------
-
-/// Collision with an entity target.
-#[derive(Message, Clone, Debug, Reflect)]
-pub struct CollidedEntity<P: PosBound> {
-    pub entity: Entity,
-    pub target: Target<P>,
-}
-
-impl<P: PosBound> GearboxMessage for CollidedEntity<P> {
-    type Validator = AcceptAll;
-    fn target(&self) -> Entity { self.entity }
-}
-
-impl<P: PosBound> CollidedEntity<P> {
-    pub fn new(entity: Entity, target: Target<P>) -> Self {
-        Self { entity, target }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// CollidedPosition<P> - collision event carrying contact position
-// ---------------------------------------------------------------------------
-
-/// Collision with a contact point position.
-#[derive(Message, Clone, Debug, Reflect)]
-pub struct CollidedPosition<P: PosBound> {
-    pub entity: Entity,
-    pub target: Target<P>,
-}
-
-impl<P: PosBound> GearboxMessage for CollidedPosition<P> {
-    type Validator = AcceptAll;
-    fn target(&self) -> Entity { self.entity }
-}
-
-impl<P: PosBound> CollidedPosition<P> {
-    pub fn new(entity: Entity, target: Target<P>) -> Self {
-        Self { entity, target }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // SideEffect impls: all diesel transition messages produce GoOffOrigin<P>
 // ---------------------------------------------------------------------------
 
@@ -142,4 +98,4 @@ macro_rules! impl_go_off_side_effect {
     )*};
 }
 
-impl_go_off_side_effect!(OnRepeat, StartInvoke, StopInvoke, CollidedEntity, CollidedPosition);
+impl_go_off_side_effect!(OnRepeat, StartInvoke, StopInvoke);

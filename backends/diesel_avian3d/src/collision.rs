@@ -4,6 +4,63 @@ use avian3d::prelude::{CollisionStart, Collisions, Position};
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
+use bevy_diesel::bevy_gearbox::{Matched, SideEffect};
+use bevy_diesel::effect::GoOffOrigin;
+use bevy_diesel::target::Target as DieselTarget;
+
+// ---------------------------------------------------------------------------
+// Collision event types (concrete Vec3)
+// ---------------------------------------------------------------------------
+
+/// Collision with an entity target.
+#[derive(Message, Clone, Debug, Reflect)]
+pub struct CollidedEntity {
+    pub entity: Entity,
+    pub target: DieselTarget<Vec3>,
+}
+
+impl GearboxMessage for CollidedEntity {
+    type Validator = AcceptAll;
+    fn target(&self) -> Entity { self.entity }
+}
+
+impl CollidedEntity {
+    pub fn new(entity: Entity, target: DieselTarget<Vec3>) -> Self {
+        Self { entity, target }
+    }
+}
+
+/// Collision with a contact point position.
+#[derive(Message, Clone, Debug, Reflect)]
+pub struct CollidedPosition {
+    pub entity: Entity,
+    pub target: DieselTarget<Vec3>,
+}
+
+impl GearboxMessage for CollidedPosition {
+    type Validator = AcceptAll;
+    fn target(&self) -> Entity { self.entity }
+}
+
+impl CollidedPosition {
+    pub fn new(entity: Entity, target: DieselTarget<Vec3>) -> Self {
+        Self { entity, target }
+    }
+}
+
+// SideEffect impls: collision messages produce GoOffOrigin<Vec3>
+
+impl SideEffect<CollidedEntity> for GoOffOrigin<Vec3> {
+    fn produce(matched: &Matched<CollidedEntity>) -> Option<Self> {
+        Some(GoOffOrigin::new(matched.target, matched.message.target))
+    }
+}
+
+impl SideEffect<CollidedPosition> for GoOffOrigin<Vec3> {
+    fn produce(matched: &Matched<CollidedPosition>) -> Option<Self> {
+        Some(GoOffOrigin::new(matched.target, matched.message.target))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // CollisionFilter trait + Collides marker
@@ -54,8 +111,8 @@ fn unfiltered_collision_system(
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
     collisions: Collisions,
-    mut entity_writer: MessageWriter<CollidedEntity<Vec3>>,
-    mut position_writer: MessageWriter<CollidedPosition<Vec3>>,
+    mut entity_writer: MessageWriter<CollidedEntity>,
+    mut position_writer: MessageWriter<CollidedPosition>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
         emit_entity_if(&q_collides, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
@@ -75,7 +132,7 @@ fn emit_entity_if(
     q_collides: &Query<(), With<Collides>>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
-    writer: &mut MessageWriter<CollidedEntity<Vec3>>,
+    writer: &mut MessageWriter<CollidedEntity>,
     ability: Entity,
     target: Entity,
 ) {
@@ -94,7 +151,7 @@ fn emit_entity_if(
 
 fn emit_position_if(
     q_collides: &Query<(), With<Collides>>,
-    writer: &mut MessageWriter<CollidedPosition<Vec3>>,
+    writer: &mut MessageWriter<CollidedPosition>,
     position: Vec3,
     ability: Entity,
     target: Entity,
@@ -135,8 +192,8 @@ fn filtered_collision_system<F: CollisionFilter>(
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
     collisions: Collisions,
-    mut entity_writer: MessageWriter<CollidedEntity<Vec3>>,
-    mut position_writer: MessageWriter<CollidedPosition<Vec3>>,
+    mut entity_writer: MessageWriter<CollidedEntity>,
+    mut position_writer: MessageWriter<CollidedPosition>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
         emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
@@ -176,7 +233,7 @@ fn emit_entity_filtered<F: CollisionFilter>(
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
-    writer: &mut MessageWriter<CollidedEntity<Vec3>>,
+    writer: &mut MessageWriter<CollidedEntity>,
     ability: Entity,
     target: Entity,
 ) {
@@ -192,7 +249,7 @@ fn emit_position_filtered<F: CollisionFilter>(
     q_filter: &Query<&F>,
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
-    writer: &mut MessageWriter<CollidedPosition<Vec3>>,
+    writer: &mut MessageWriter<CollidedPosition>,
     position: Vec3,
     ability: Entity,
     target: Entity,

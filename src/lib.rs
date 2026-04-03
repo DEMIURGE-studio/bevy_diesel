@@ -48,7 +48,7 @@ pub mod prelude {
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
     pub use crate::effect::{GoOff, GoOffConfig, SubEffectOf, SubEffects};
-    pub use crate::events::{StartInvoke, StopInvoke, OnRepeat, CollidedEntity, CollidedPosition};
+    pub use crate::events::{StartInvoke, StopInvoke, OnRepeat};
     pub use crate::invoker::{InvokedBy, Invokes, resolve_invoker, resolve_root};
     pub use crate::pipeline::{generate_targets, propagate_observer};
     pub use crate::print::PrintLn;
@@ -59,7 +59,9 @@ pub mod prelude {
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
     pub use crate::gearbox::repeater::{Repeater, repeater_tick};
-    pub use crate::gearbox::templates::apply_sub_effect;
+    pub use crate::gearbox::templates::{
+        apply_sub_effect, template_invoked, template_repeater, template_single_shot,
+    };
     pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
         AlwaysEdge, Delay, MessageEdge, Done, TerminalState,

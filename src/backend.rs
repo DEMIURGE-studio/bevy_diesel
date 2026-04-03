@@ -5,7 +5,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_gearbox::RegistrationAppExt;
 
-use crate::events::{CollidedEntity, CollidedPosition, OnRepeat, StartInvoke, StopInvoke};
+use crate::events::{OnRepeat, StartInvoke, StopInvoke};
 use crate::gearbox::repeater;
 use crate::spawn::{OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget};
 use crate::target::Target;
@@ -170,10 +170,6 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.register_side_effect::<StopInvoke<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnRepeat<B::Pos>>();
         app.register_side_effect::<OnRepeat<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
-        app.register_transition::<CollidedEntity<B::Pos>>();
-        app.register_side_effect::<CollidedEntity<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
-        app.register_transition::<CollidedPosition<B::Pos>>();
-        app.register_side_effect::<CollidedPosition<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnOrigin<B::Pos>>();
         app.register_side_effect::<OnSpawnOrigin<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnTarget<B::Pos>>();

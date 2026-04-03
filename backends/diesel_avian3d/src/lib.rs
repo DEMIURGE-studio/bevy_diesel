@@ -37,8 +37,7 @@ pub mod prelude {
     pub type StartInvoke = bevy_diesel::events::StartInvoke<bevy::math::Vec3>;
     pub type StopInvoke = bevy_diesel::events::StopInvoke<bevy::math::Vec3>;
     pub type OnRepeat = bevy_diesel::events::OnRepeat<bevy::math::Vec3>;
-    pub type CollidedEntity = bevy_diesel::events::CollidedEntity<bevy::math::Vec3>;
-    pub type CollidedPosition = bevy_diesel::events::CollidedPosition<bevy::math::Vec3>;
+    pub use crate::collision::{CollidedEntity, CollidedPosition};
     pub type OnSpawnOrigin = bevy_diesel::spawn::OnSpawnOrigin<bevy::math::Vec3>;
     pub type OnSpawnTarget = bevy_diesel::spawn::OnSpawnTarget<bevy::math::Vec3>;
     pub type OnSpawnInvoker = bevy_diesel::spawn::OnSpawnInvoker<bevy::math::Vec3>;
@@ -46,6 +45,37 @@ pub mod prelude {
     pub type TargetGenerator = bevy_diesel::target::TargetGenerator<crate::AvianBackend>;
     pub type TargetMutator = bevy_diesel::target::TargetMutator<crate::AvianBackend>;
     pub type SpawnConfig = bevy_diesel::spawn::SpawnConfig<crate::AvianBackend>;
+
+    // Vec3-concrete template wrappers (shadow the generic versions from bevy_diesel::prelude)
+
+    /// Outermost ability wrapper: Ready → Invoking → Cooldown, with Vec3 positions.
+    pub fn template_invoked<F>(
+        commands: &mut bevy::prelude::Commands,
+        entity: Option<bevy::prelude::Entity>,
+        cooldown: std::time::Duration,
+        configure_invoking: F,
+    ) -> bevy::prelude::Entity
+    where
+        F: FnOnce(&mut bevy::prelude::EntityCommands),
+    {
+        bevy_diesel::gearbox::templates::template_invoked::<bevy::math::Vec3, F>(
+            commands, entity, cooldown, configure_invoking,
+        )
+    }
+
+    /// Counted volley sub-machine with Vec3 positions.
+    pub fn template_repeater<F>(
+        count_expr: &str,
+        delay_secs: f32,
+        on_tick: F,
+    ) -> impl FnOnce(&mut bevy::prelude::EntityCommands)
+    where
+        F: FnOnce(&mut bevy::prelude::EntityCommands),
+    {
+        bevy_diesel::gearbox::templates::template_repeater::<bevy::math::Vec3, F>(
+            count_expr, delay_secs, on_tick,
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +387,11 @@ impl Plugin for AvianDieselPlugin {
         // Avian3d-specific actions
         app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
 
-        // Collision system (unfiltered - entities with Collides marker)
+        // Collision types + system (unfiltered - entities with Collides marker)
+        app.register_transition::<collision::CollidedEntity>();
+        app.register_side_effect::<collision::CollidedEntity, bevy_diesel::effect::GoOffOrigin<Vec3>>();
+        app.register_transition::<collision::CollidedPosition>();
+        app.register_side_effect::<collision::CollidedPosition, bevy_diesel::effect::GoOffOrigin<Vec3>>();
         collision::plugin(app);
     }
 }
