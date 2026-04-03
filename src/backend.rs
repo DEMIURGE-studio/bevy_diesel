@@ -125,7 +125,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
                 .after(crate::DieselSet::Propagation),
             crate::DieselSet::AttributeEffects
                 .in_set(crate::DieselSet::Effects),
-            bevy_gearbox::GearboxPhase::EdgeCheckPhase
+            bevy_gearbox::GearboxPhase::GaugeSync
                 .after(crate::DieselSet::Effects),
         ));
         app.add_systems(bevy_gearbox::GearboxSchedule, (
@@ -134,7 +134,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
                 .before(crate::DieselSet::Effects),
             ApplyDeferred
                 .after(crate::DieselSet::Effects)
-                .before(bevy_gearbox::GearboxPhase::EdgeCheckPhase),
+                .before(bevy_gearbox::GearboxPhase::GaugeSync),
         ));
 
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)

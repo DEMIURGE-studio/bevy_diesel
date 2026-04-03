@@ -22,15 +22,15 @@ pub use inventory;
 
 /// System sets for ordering diesel's effect pipeline inside [`GearboxSchedule`].
 ///
-/// These run between [`GearboxPhase::EntryPhase`] and [`GearboxPhase::EdgeCheckPhase`]
+/// These run between [`GearboxPhase::EntryPhase`] and [`GearboxPhase::GaugeSync`]
 /// so that sub-effects (attribute changes, spawns, etc.) resolve before
-/// always-edge guards are evaluated.
+/// derived components are synced and always-edge guards are evaluated.
 ///
 /// ```text
 /// GearboxSchedule:
 ///   TransitionPhase → ApplyDeferred → ExitPhase → EntryPhase
 ///     → DieselPropagation → ApplyDeferred → DieselEffects → ApplyDeferred
-///     → EdgeCheckPhase
+///     → GaugeSync → EdgeCheckPhase
 /// ```
 #[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DieselSet {
