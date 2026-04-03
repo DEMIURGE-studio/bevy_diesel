@@ -123,6 +123,8 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
                 .after(bevy_gearbox::GearboxPhase::EntryPhase),
             crate::DieselSet::Effects
                 .after(crate::DieselSet::Propagation),
+            crate::DieselSet::AttributeEffects
+                .in_set(crate::DieselSet::Effects),
             bevy_gearbox::GearboxPhase::EdgeCheckPhase
                 .after(crate::DieselSet::Effects),
         ));
@@ -137,10 +139,17 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
 
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)
         app.add_plugins(bevy_gauge::plugin::AttributesPlugin);
+        app.add_plugins(crate::gauge::DieselGaugePlugin::<B::Pos>::default());
         app.add_plugins(crate::gauge::pae::DieselPaePlugin);
 
         // Template registry
         app.init_resource::<crate::spawn::TemplateRegistry>();
+
+        // GoOffConfig: auto-emit GoOffOrigin on state entry for configured states
+        app.add_systems(
+            bevy_gearbox::GearboxSchedule,
+            crate::effect::go_off_on_entry::<B>.in_set(crate::DieselSet::Propagation),
+        );
 
         // Repeater (Idle→Apply cycle driven by OnRepeat)
         app.add_systems(
@@ -171,7 +180,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.register_side_effect::<OnSpawnTarget<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnInvoker<B::Pos>>();
         app.register_side_effect::<OnSpawnInvoker<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
-        app.register_transition::<repeater::OnComplete>();
+        // Done is registered by GearboxPlugin (built-in terminal state message)
         // Register GoOff message types
         app.add_message::<crate::effect::GoOffOrigin<B::Pos>>();
         app.add_message::<crate::effect::GoOff<B::Pos>>();

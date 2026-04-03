@@ -12,6 +12,7 @@ pub use bevy_diesel;
 
 pub mod ballistics;
 pub mod collision;
+pub mod impulse;
 pub mod projectile;
 pub mod velocity;
 
@@ -25,6 +26,7 @@ pub mod prelude {
         LinearProjectile, LinearProjectileEffect, ProjectileEffect, ProjectilePlugin,
     };
     pub use crate::velocity::{Trajectory, VelocityEffect, VelocityEffectPlugin};
+    pub use crate::impulse::ImpulseEffect;
     pub use crate::{AvianBackend, AvianFilter, AvianGatherer, NumberType, Vec3Offset};
     pub use bevy_diesel::prelude::*;
 
@@ -349,8 +351,7 @@ impl Plugin for AvianDieselPlugin {
         app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule, (
             bevy_diesel::spawn::spawn_system::<AvianBackend>,
             bevy_diesel::print::print_effect::<Vec3>,
-            bevy_diesel::gauge::modifiers::modifier_set_system::<Vec3>,
-            bevy_diesel::gauge::instant::instant_set_system::<Vec3>,
+            impulse::impulse_effect_system,
         ).in_set(bevy_diesel::DieselSet::Effects));
 
         // Avian3d-specific actions

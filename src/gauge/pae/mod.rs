@@ -29,7 +29,9 @@ impl Plugin for DieselPaePlugin {
         );
         app.add_systems(
             bevy_gearbox::GearboxSchedule,
-            stats_change_system.in_set(crate::DieselSet::Effects),
+            stats_change_system
+                .in_set(crate::DieselSet::Effects)
+                .after(crate::DieselSet::AttributeEffects),
         );
         app.add_observer(on_add_effect_target)
             .add_observer(on_remove_effect_target);

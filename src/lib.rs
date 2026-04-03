@@ -38,13 +38,16 @@ pub enum DieselSet {
     Propagation,
     /// Leaf effect systems that consume [`GoOff`].
     Effects,
+    /// Subset of Effects: systems that mutate attributes (instant, modifiers).
+    /// Runs before guard evaluation so stat changes are visible to branches.
+    AttributeEffects,
 }
 
 pub mod prelude {
     pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
-    pub use crate::effect::{GoOff, SubEffectOf, SubEffects};
+    pub use crate::effect::{GoOff, GoOffConfig, SubEffectOf, SubEffects};
     pub use crate::events::{StartInvoke, StopInvoke, OnRepeat, CollidedEntity, CollidedPosition};
     pub use crate::invoker::{InvokedBy, Invokes, resolve_invoker, resolve_root};
     pub use crate::pipeline::{generate_targets, propagate_observer};
@@ -55,13 +58,13 @@ pub mod prelude {
     };
     pub use crate::gauge::prelude::*;
     pub use crate::go_off;
-    pub use crate::gearbox::repeater::{OnComplete, Repeater, repeater_tick};
+    pub use crate::gearbox::repeater::{Repeater, repeater_tick};
     pub use crate::gearbox::templates::apply_sub_effect;
     pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
-        AlwaysEdge, Delay, MessageEdge,
+        AlwaysEdge, Delay, MessageEdge, Done, TerminalState,
         Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
-        SpawnSubstate, SpawnTransition, BuildTransition, TransitionExt, InitStateMachine,
+        SpawnSubstate, SpawnTransition, BuildTransition, SpawnBranch, TransitionExt, InitStateMachine,
         GuardProvider, GearboxSet, EnterState, ExitState, Active,
     };
     pub use crate::propagation::{

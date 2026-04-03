@@ -4,6 +4,6 @@ pub mod templates;
 
 pub mod prelude {
     pub use crate::go_off;
-    pub use crate::gearbox::repeater::{OnComplete, Repeater, repeater_tick};
+    pub use crate::gearbox::repeater::{Repeater, repeater_tick};
     pub use crate::gearbox::templates::apply_sub_effect;
 }

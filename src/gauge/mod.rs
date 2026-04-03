@@ -21,10 +21,10 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Default for Dies
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Plugin for DieselGaugePlugin<P> {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
+        app.add_systems(bevy_gearbox::GearboxSchedule, (
             modifiers::modifier_set_system::<P>,
             instant::instant_set_system::<P>,
-        ));
+        ).in_set(crate::DieselSet::AttributeEffects));
     }
 }
 
