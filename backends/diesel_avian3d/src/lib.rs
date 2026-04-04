@@ -45,6 +45,7 @@ pub mod prelude {
     pub type TargetGenerator = bevy_diesel::target::TargetGenerator<crate::AvianBackend>;
     pub type TargetMutator = bevy_diesel::target::TargetMutator<crate::AvianBackend>;
     pub type SpawnConfig = bevy_diesel::spawn::SpawnConfig<crate::AvianBackend>;
+    pub type GoOffConfig = bevy_diesel::effect::GoOffConfig<crate::AvianBackend>;
 
     // Vec3-concrete template wrappers (shadow the generic versions from bevy_diesel::prelude)
 
@@ -61,6 +62,16 @@ pub mod prelude {
         bevy_diesel::gearbox::templates::template_invoked::<bevy::math::Vec3, F>(
             commands, entity, cooldown, configure_invoking,
         )
+    }
+
+    /// Single-shot fire → done state with the avian backend.
+    pub fn template_single_shot<F>(
+        on_fire: F,
+    ) -> impl FnOnce(&mut bevy::prelude::EntityCommands)
+    where
+        F: FnOnce(&mut bevy::prelude::EntityCommands),
+    {
+        bevy_diesel::gearbox::templates::template_single_shot::<crate::AvianBackend, F>(on_fire)
     }
 
     /// Counted volley sub-machine with Vec3 positions.
@@ -373,7 +384,11 @@ impl Plugin for AvianDieselPlugin {
 
         // Propagation: reads GoOffOrigin, writes GoOff
         app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule,
-            propagate_observer::<AvianBackend>
+            (
+                bevy_diesel::effect::go_off_on_entry::<AvianBackend>,
+                propagate_observer::<AvianBackend>,
+            )
+                .chain()
                 .in_set(bevy_diesel::DieselSet::Propagation),
         );
 

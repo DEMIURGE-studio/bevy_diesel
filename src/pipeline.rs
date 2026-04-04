@@ -66,7 +66,7 @@ pub fn propagate_system<B: SpatialBackend>(
 ) {
     for origin in reader.read() {
         let root_entity = origin.entity;
-        let root_target = origin.target;
+        let passed_target = origin.target;
 
         let invoker = resolve_invoker(&q_invoker, root_entity);
         let root = resolve_root(&q_child_of, root_entity);
@@ -76,11 +76,39 @@ pub fn propagate_system<B: SpatialBackend>(
             .map(Target::from)
             .unwrap_or_default();
 
-        // Fire GoOff on the root entity itself
-        writer.write(GoOff::new(root_entity, root_target));
+        // Resolve the root's own target list — apply its TargetMutator if
+        // present, otherwise use the passed target verbatim. This matches
+        // the behavior applied to children below.
+        let root_targets: Vec<Target<B::Pos>> =
+            if let Ok(Some(mutator)) = q_target_mutator.get(root_entity) {
+                let mut targets = generate_targets::<B>(
+                    &mutator.generator,
+                    &mut ctx,
+                    invoker,
+                    invoker_target,
+                    root,
+                    B::Pos::default(),
+                    passed_target,
+                );
+                targets = B::apply_filter(
+                    &mut ctx,
+                    targets,
+                    &mutator.generator.filter,
+                    invoker,
+                    passed_target.position,
+                );
+                targets
+            } else {
+                vec![passed_target]
+            };
+
+        // Fire GoOff on the root entity itself (one per resolved target).
+        for &target in &root_targets {
+            writer.write(GoOff::new(root_entity, target));
+        }
 
         // Walk the tree: (entity, targets_for_this_entity)
-        let mut stack: Vec<(Entity, Vec<Target<B::Pos>>)> = vec![(root_entity, vec![root_target])];
+        let mut stack: Vec<(Entity, Vec<Target<B::Pos>>)> = vec![(root_entity, root_targets)];
 
         while let Some((parent, in_targets)) = stack.pop() {
             let Ok(subs) = q_sub_effects.get(parent) else {

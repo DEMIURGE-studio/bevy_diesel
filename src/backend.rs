@@ -145,11 +145,6 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // Template registry
         app.init_resource::<crate::spawn::TemplateRegistry>();
 
-        // GoOffConfig: auto-emit GoOffOrigin on state entry for configured states
-        app.add_systems(
-            bevy_gearbox::GearboxSchedule,
-            crate::effect::go_off_on_entry::<B>.in_set(crate::DieselSet::Propagation),
-        );
 
         // Repeater (Idle→Apply cycle driven by OnRepeat)
         app.add_systems(

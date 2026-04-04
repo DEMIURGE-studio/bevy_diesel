@@ -168,7 +168,9 @@ where
 ///
 /// Use this for one-shot abilities (no repeater). The child becomes the
 /// `InitialState` of the parent.
-pub fn template_single_shot<F>(on_fire: F) -> impl FnOnce(&mut EntityCommands)
+pub fn template_single_shot<B: SpatialBackend, F>(
+    on_fire: F,
+) -> impl FnOnce(&mut EntityCommands)
 where
     F: FnOnce(&mut EntityCommands),
 {
@@ -177,7 +179,10 @@ where
 
         invoking.with_children(|parent| {
             let fire = parent
-                .spawn_diesel_substate(invoking_entity, (Name::new("Fire"), TerminalState, GoOffConfig))
+                .spawn_diesel_substate(
+                    invoking_entity,
+                    (Name::new("Fire"), TerminalState, GoOffConfig::<B>::default()),
+                )
                 .id();
 
             let mut fire_ec = parent.commands_mut().entity(fire);
