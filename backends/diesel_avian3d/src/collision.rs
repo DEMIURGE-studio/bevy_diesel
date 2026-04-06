@@ -4,8 +4,8 @@ use avian3d::prelude::{CollisionStart, Collisions, Position};
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::bevy_gearbox::{Matched, SideEffect};
 use bevy_diesel::effect::GoOffOrigin;
+use bevy_diesel::events::{HasDieselTarget, PosBound};
 use bevy_diesel::target::Target as DieselTarget;
 
 // ---------------------------------------------------------------------------
@@ -48,18 +48,12 @@ impl CollidedPosition {
     }
 }
 
-// SideEffect impls: collision messages produce GoOffOrigin<Vec3>
-
-impl SideEffect<CollidedEntity> for GoOffOrigin<Vec3> {
-    fn produce(matched: &Matched<CollidedEntity>) -> Option<Self> {
-        Some(GoOffOrigin::new(matched.target, matched.message.target))
-    }
+impl HasDieselTarget<Vec3> for CollidedEntity {
+    fn diesel_target(&self) -> DieselTarget<Vec3> { self.target }
 }
 
-impl SideEffect<CollidedPosition> for GoOffOrigin<Vec3> {
-    fn produce(matched: &Matched<CollidedPosition>) -> Option<Self> {
-        Some(GoOffOrigin::new(matched.target, matched.message.target))
-    }
+impl HasDieselTarget<Vec3> for CollidedPosition {
+    fn diesel_target(&self) -> DieselTarget<Vec3> { self.target }
 }
 
 // ---------------------------------------------------------------------------

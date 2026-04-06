@@ -29,9 +29,8 @@ impl Plugin for DieselPaePlugin {
         );
         app.add_systems(
             bevy_gearbox::GearboxSchedule,
-            stats_change_system
-                .in_set(crate::DieselSet::Effects)
-                .after(crate::DieselSet::AttributeEffects),
+            attribute_requirements_blocker
+                .in_set(bevy_gearbox::GearboxPhase::BlockerPhase),
         );
         app.add_observer(on_add_effect_target)
             .add_observer(on_remove_effect_target);
@@ -117,26 +116,23 @@ fn on_remove_effect_target(remove: On<Remove, EffectTarget>, mut commands: Comma
 // Systems
 // ---------------------------------------------------------------------------
 
-fn stats_change_system(
-    q_attrs: Query<(Entity, &Attributes), Changed<Attributes>>,
-    q_requirements_of: Query<&RequirementsOf>,
-    mut q_edge: Query<(&mut Guards, &mut AttributeRequirements)>,
+/// Blocker system: block transitions whose edge has unmet
+/// [`AttributeRequirements`]. Runs in [`BlockerPhase`](bevy_gearbox::GearboxPhase::BlockerPhase).
+fn attribute_requirements_blocker(
+    mut mutator: MessageMutator<bevy_gearbox::TransitionMessage>,
+    q_requirements: Query<(&AttributeRequirements, &RequiresStatsOf)>,
+    q_attrs: Query<&Attributes>,
 ) {
-    for (entity, attrs) in q_attrs.iter() {
-        for requires_entity in q_requirements_of.iter_descendants(entity) {
-            if let Ok((mut guards, mut requirements)) = q_edge.get_mut(requires_entity) {
-                let blocker_name = "stat_req_unmet";
-                let currently_blocked = guards.has_guard(blocker_name);
-                let should_be_blocked = !requirements.met(attrs);
-
-                if currently_blocked != should_be_blocked {
-                    if should_be_blocked {
-                        guards.add_guard(blocker_name.to_string());
-                    } else {
-                        guards.remove_guard(blocker_name);
-                    }
-                }
-            }
+    for msg in mutator.read() {
+        if msg.blocked { continue; }
+        let Some(edge) = msg.edge else { continue; };
+        let Ok((reqs, stats_of)) = q_requirements.get(edge) else { continue; };
+        let Ok(attrs) = q_attrs.get(stats_of.0) else {
+            msg.blocked = true;
+            continue;
+        };
+        if !reqs.met(attrs) {
+            msg.blocked = true;
         }
     }
 }

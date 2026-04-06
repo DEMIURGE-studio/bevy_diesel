@@ -65,9 +65,9 @@ pub mod prelude {
     pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
     pub use bevy_gearbox::prelude::{
         AlwaysEdge, Delay, MessageEdge, Done, TerminalState,
-        Guards, InitialState, Source, StateMachine, StateComponent, SubstateOf,
+        InitialState, Source, StateMachine, StateComponent, SubstateOf,
         SpawnSubstate, SpawnTransition, BuildTransition, SpawnBranch, TransitionExt, InitStateMachine,
-        GuardProvider, GearboxSet, EnterState, ExitState, Active,
+        GearboxSet, EnterState, ExitState, Active,
     };
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,

@@ -158,19 +158,30 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.add_systems(PostUpdate, crate::despawn::despawn_queue_system);
         app.register_state_component::<crate::despawn::DelayedDespawn>();
 
-        // Register transition messages + side effects
+        // Register transition messages
         app.register_transition::<StartInvoke<B::Pos>>();
-        app.register_side_effect::<StartInvoke<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<StopInvoke<B::Pos>>();
-        app.register_side_effect::<StopInvoke<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnRepeat<B::Pos>>();
-        app.register_side_effect::<OnRepeat<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnOrigin<B::Pos>>();
-        app.register_side_effect::<OnSpawnOrigin<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnTarget<B::Pos>>();
-        app.register_side_effect::<OnSpawnTarget<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
         app.register_transition::<OnSpawnInvoker<B::Pos>>();
-        app.register_side_effect::<OnSpawnInvoker<B::Pos>, crate::effect::GoOffOrigin<B::Pos>>();
+
+        // Side-effect systems: produce GoOffOrigin<P> from matched transitions
+        use crate::events::go_off_side_effect;
+        app.add_systems(bevy_gearbox::GearboxSchedule, (
+            go_off_side_effect::<StartInvoke<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+            go_off_side_effect::<StopInvoke<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+            go_off_side_effect::<OnRepeat<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+            go_off_side_effect::<OnSpawnOrigin<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+            go_off_side_effect::<OnSpawnTarget<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+            go_off_side_effect::<OnSpawnInvoker<B::Pos>, B::Pos>
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
+        ));
         // Done is registered by GearboxPlugin (built-in terminal state message)
         // Register GoOff message types
         app.add_message::<crate::effect::GoOffOrigin<B::Pos>>();

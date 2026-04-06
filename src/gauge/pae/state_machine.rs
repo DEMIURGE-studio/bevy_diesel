@@ -212,7 +212,6 @@ pub fn pae_state(
             Source(applied_state),
             Target(active_state),
             AlwaysEdge,
-            Guards::new(),
             RequiresStatsOf(effect_target),
         ));
 

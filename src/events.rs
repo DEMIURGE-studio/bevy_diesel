@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy_gearbox::{AcceptAll, GearboxMessage, Matched, SideEffect};
+use bevy_gearbox::{AcceptAll, BlockedEdges, GearboxMessage, Matched};
 
 use crate::effect::GoOffOrigin;
 use crate::target::Target;
@@ -85,17 +85,33 @@ impl<P: PosBound> StopInvoke<P> {
 }
 
 // ---------------------------------------------------------------------------
-// SideEffect impls: all diesel transition messages produce GoOffOrigin<P>
+// GoOffOrigin side-effect system
 // ---------------------------------------------------------------------------
 
-macro_rules! impl_go_off_side_effect {
-    ($($Msg:ident),*) => {$(
-        impl<P: PosBound> SideEffect<$Msg<P>> for GoOffOrigin<P> {
-            fn produce(matched: &Matched<$Msg<P>>) -> Option<Self> {
-                Some(GoOffOrigin::new(matched.target, matched.message.target))
-            }
-        }
-    )*};
+/// Trait for diesel messages that carry a `Target<P>` payload.
+pub trait HasDieselTarget<P: PosBound>: GearboxMessage {
+    fn diesel_target(&self) -> Target<P>;
 }
 
-impl_go_off_side_effect!(OnRepeat, StartInvoke, StopInvoke);
+impl<P: PosBound> HasDieselTarget<P> for OnRepeat<P> {
+    fn diesel_target(&self) -> Target<P> { self.target }
+}
+impl<P: PosBound> HasDieselTarget<P> for StartInvoke<P> {
+    fn diesel_target(&self) -> Target<P> { self.target }
+}
+impl<P: PosBound> HasDieselTarget<P> for StopInvoke<P> {
+    fn diesel_target(&self) -> Target<P> { self.target }
+}
+
+/// Generic side-effect system: reads surviving `Matched<M>` and writes
+/// `GoOffOrigin<P>`. Runs in [`SideEffectPhase`](bevy_gearbox::GearboxPhase::SideEffectPhase).
+pub fn go_off_side_effect<M: HasDieselTarget<P> + GearboxMessage, P: PosBound>(
+    mut reader: MessageReader<Matched<M>>,
+    blocked: Res<BlockedEdges>,
+    mut writer: MessageWriter<GoOffOrigin<P>>,
+) {
+    for matched in reader.read() {
+        if blocked.is_blocked(matched.edge) { continue; }
+        writer.write(GoOffOrigin::new(matched.target, matched.message.diesel_target()));
+    }
+}

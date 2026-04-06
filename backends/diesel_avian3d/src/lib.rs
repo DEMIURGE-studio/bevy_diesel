@@ -412,9 +412,13 @@ impl Plugin for AvianDieselPlugin {
 
         // Collision types + system (unfiltered - entities with Collides marker)
         app.register_transition::<collision::CollidedEntity>();
-        app.register_side_effect::<collision::CollidedEntity, bevy_diesel::effect::GoOffOrigin<Vec3>>();
         app.register_transition::<collision::CollidedPosition>();
-        app.register_side_effect::<collision::CollidedPosition, bevy_diesel::effect::GoOffOrigin<Vec3>>();
+        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule, (
+            bevy_diesel::events::go_off_side_effect::<collision::CollidedEntity, Vec3>
+                .in_set(bevy_diesel::bevy_gearbox::GearboxPhase::SideEffectPhase),
+            bevy_diesel::events::go_off_side_effect::<collision::CollidedPosition, Vec3>
+                .in_set(bevy_diesel::bevy_gearbox::GearboxPhase::SideEffectPhase),
+        ));
         collision::plugin(app);
     }
 }

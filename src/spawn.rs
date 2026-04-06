@@ -229,15 +229,8 @@ macro_rules! spawn_event {
             }
         }
 
-        impl<P: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'static>
-            bevy_gearbox::SideEffect<$Name<P>> for GoOffOrigin<P>
-        {
-            fn produce(matched: &bevy_gearbox::Matched<$Name<P>>) -> Option<Self> {
-                Some(GoOffOrigin::new(
-                    matched.target,
-                    matched.message.target,
-                ))
-            }
+        impl<P: crate::events::PosBound> crate::events::HasDieselTarget<P> for $Name<P> {
+            fn diesel_target(&self) -> crate::target::Target<P> { self.target }
         }
     };
 }

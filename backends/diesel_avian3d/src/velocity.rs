@@ -19,6 +19,10 @@ pub struct VelocityEffect {
     pub speed: f32,
     pub gravity: f32,
     pub trajectory: Trajectory,
+    /// If set, the target position is clamped to exactly this distance from
+    /// the invoker in the XZ plane. The arc always covers the same ground
+    /// distance regardless of how far away the actual target is.
+    pub fixed_range: Option<f32>,
 }
 
 impl Default for VelocityEffect {
@@ -27,6 +31,7 @@ impl Default for VelocityEffect {
             speed: 15.0,
             gravity: 9.81,
             trajectory: Trajectory::default(),
+            fixed_range: None,
         }
     }
 }
@@ -37,7 +42,13 @@ impl VelocityEffect {
             speed,
             gravity,
             trajectory,
+            fixed_range: None,
         }
+    }
+
+    pub fn with_fixed_range(mut self, range: f32) -> Self {
+        self.fixed_range = Some(range);
+        self
     }
 }
 
@@ -70,7 +81,18 @@ fn velocity_effect_system(
             continue;
         };
 
-        let target_position = target.position;
+        let target_position = if let Some(range) = velocity_effect.fixed_range {
+            // Clamp to fixed distance in XZ from the invoker.
+            let origin = transform.translation;
+            let dir_xz = Vec3::new(
+                target.position.x - origin.x,
+                0.0,
+                target.position.z - origin.z,
+            ).normalize_or_zero();
+            origin + dir_xz * range
+        } else {
+            target.position
+        };
 
         let calculated_velocity = match velocity_effect.trajectory {
             Trajectory::LowAngle => crate::ballistics::calculate_low_angle_velocity_with_speed(
