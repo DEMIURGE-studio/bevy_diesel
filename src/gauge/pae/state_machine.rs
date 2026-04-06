@@ -128,29 +128,53 @@ impl GearboxMessage for PAEUnapplyApproved {
 // State machine builder
 // ---------------------------------------------------------------------------
 
-/// Entity handles returned by [`pae_state_machine`].
+/// Entity handles returned by [`pae_state`] and [`pae_state_machine`].
+///
+/// `container` is the entity that owns the PAE components
+/// (`PersistentAttributeEffect`, `AppliedModifiers`, `ActivatedModifiers`,
+/// `EffectTarget`). For top-level [`pae_state_machine`] this is the same
+/// entity as the state-machine chart root. For nested [`pae_state`] it is
+/// the entity passed as `pae_container` and is a substate of some host
+/// state in a larger chart.
 pub struct PaeEntities {
+    /// Alias of `container`. Retained for callers that treat the PAE as a
+    /// standalone chart root.
     pub root: Entity,
+    pub container: Entity,
     pub unapplied: Entity,
     pub applied: Entity,
     pub active: Entity,
 }
 
-/// Build a Persistent Attribute Effect state machine.
+/// Lay Persistent Attribute Effect infrastructure under an existing state.
 ///
-/// Creates a 3-state machine (Unapplied → Applied → Active) with modifier
-/// application on state transitions and stat-gated activation.
-pub fn pae_state_machine(
+/// Inserts the PAE container components on `pae_container` and spawns the
+/// three PAE substates (Unapplied / Applied / Active) as
+/// `SubstateOf(pae_container)`, along with the five standard transition
+/// edges. Guards on the Applied → Active edge use
+/// `RequiresStatsOf(effect_target)`, and modifiers apply/unapply against
+/// `effect_target`'s attributes.
+///
+/// The caller is responsible for placing `pae_container` in the wider
+/// chart (either as the chart root with its own `StateMachine` +
+/// `InitialState`, or as a substate of some host state). The returned
+/// [`PaeEntities`] exposes the substates so the caller can add their own
+/// transitions in or out of the PAE region — for example, a composed
+/// caller that wants auto-application when the host state activates can
+/// spawn an `AlwaysEdge` from `unapplied` to `applied`.
+///
+/// Use [`pae_state_machine`] for the common "PAE is a standalone chart
+/// rooted at its own entity" case.
+pub fn pae_state(
     commands: &mut Commands,
-    entity: Option<Entity>,
+    pae_container: Entity,
+    effect_target: Entity,
 ) -> PaeEntities {
-    let machine_entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
-
     let mut unapplied_state = Entity::PLACEHOLDER;
     let mut applied_state = Entity::PLACEHOLDER;
     let mut active_state = Entity::PLACEHOLDER;
 
-    commands.entity(machine_entity).with_children(|parent| {
+    commands.entity(pae_container).with_children(|parent| {
         unapplied_state = parent.spawn(Name::new("Unapplied")).id();
         applied_state = parent.spawn(Name::new("Applied")).id();
         active_state = parent.spawn(Name::new("Active")).id();
@@ -164,17 +188,17 @@ pub fn pae_state_machine(
         let commands = parent.commands_mut();
 
         commands.entity(unapplied_state).insert((
-            SubstateOf(machine_entity),
+            SubstateOf(pae_container),
             StateComponent(UnappliedState),
         ));
 
         commands.entity(applied_state).insert((
-            SubstateOf(machine_entity),
+            SubstateOf(pae_container),
             StateComponent(AppliedState),
         ));
 
         commands.entity(active_state).insert((
-            SubstateOf(machine_entity),
+            SubstateOf(pae_container),
             StateComponent(ActiveState),
         ));
 
@@ -189,7 +213,7 @@ pub fn pae_state_machine(
             Target(active_state),
             AlwaysEdge,
             Guards::new(),
-            RequiresStatsOf(machine_entity),
+            RequiresStatsOf(effect_target),
         ));
 
         commands.entity(edge_active_to_applied).insert((
@@ -210,18 +234,183 @@ pub fn pae_state_machine(
             MessageEdge::<PAEUnapplyApproved>::default(),
         ));
 
-        commands.entity(machine_entity).insert((
-            Name::new("PAE Machine"),
-            PersistentAttributeEffect,
-            StateMachine::new(),
-            InitialState(unapplied_state),
-        ));
+        commands
+            .entity(pae_container)
+            .insert(PersistentAttributeEffect);
     });
 
     PaeEntities {
-        root: machine_entity,
+        root: pae_container,
+        container: pae_container,
         unapplied: unapplied_state,
         applied: applied_state,
         active: active_state,
+    }
+}
+
+/// Build a standalone Persistent Attribute Effect state machine.
+///
+/// Thin wrapper over [`pae_state`] that additionally makes the container
+/// a chart root (`StateMachine` + `InitialState(unapplied)`) with a `Name`.
+/// The PAE is self-targeted: modifiers apply to the same entity that owns
+/// the PAE container.
+pub fn pae_state_machine(
+    commands: &mut Commands,
+    entity: Option<Entity>,
+) -> PaeEntities {
+    let machine_entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
+    let pae = pae_state(commands, machine_entity, machine_entity);
+    commands.entity(machine_entity).insert((
+        Name::new("PAE Machine"),
+        StateMachine::new(),
+        InitialState(pae.unapplied),
+    ));
+    pae
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::*;
+    use bevy_gearbox::prelude::{Source, Target};
+
+    /// Build a minimal app with just enough to flush `Commands` and read
+    /// component state back. No plugins — we only care that entity
+    /// relationships and components land where we expect after `pae_state`
+    /// / `pae_state_machine` run.
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app
+    }
+
+    #[test]
+    fn pae_state_machine_builds_self_targeted_chart() {
+        let mut app = test_app();
+        let world = app.world_mut();
+
+        let pae = world.run_system_once(|mut commands: Commands| {
+            pae_state_machine(&mut commands, None)
+        }).unwrap();
+
+        // Container has the PAE marker + chart root components.
+        assert!(world.entity(pae.container).get::<PersistentAttributeEffect>().is_some());
+        assert!(world.entity(pae.container).get::<StateMachine>().is_some());
+        assert!(world.entity(pae.container).get::<InitialState>().is_some());
+        assert_eq!(pae.root, pae.container, "top-level root == container");
+
+        // Self-targeted: the guard edge's RequiresStatsOf points at the container.
+        let edges_with_requires = world
+            .query::<(&Source, &RequiresStatsOf)>()
+            .iter(world)
+            .filter(|(src, _)| src.0 == pae.applied)
+            .map(|(_, r)| r.0)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            edges_with_requires,
+            vec![pae.container],
+            "top-level PAE is self-targeted"
+        );
+
+        // Substates are SubstateOf(container).
+        for state in [pae.unapplied, pae.applied, pae.active] {
+            let parent = world.entity(state).get::<SubstateOf>().unwrap();
+            assert_eq!(parent.0, pae.container);
+        }
+    }
+
+    #[test]
+    fn pae_state_nests_under_host_state_with_distinct_effect_target() {
+        let mut app = test_app();
+        let world = app.world_mut();
+
+        // Simulate a host chart: a "host state" entity plus a separate
+        // "effect target" entity (what the PAE's modifiers should apply to).
+        let host_state = world.spawn(Name::new("HostState")).id();
+        let effect_target = world.spawn(Name::new("EffectTarget")).id();
+        let pae_container = world.spawn((Name::new("PaeContainer"), SubstateOf(host_state))).id();
+
+        let pae = world
+            .run_system_once(move |mut commands: Commands| {
+                pae_state(&mut commands, pae_container, effect_target)
+            })
+            .unwrap();
+
+        // Container got the PAE marker but NOT StateMachine / InitialState —
+        // it's a nested container, not a chart root.
+        assert!(world.entity(pae.container).get::<PersistentAttributeEffect>().is_some());
+        assert!(
+            world.entity(pae.container).get::<StateMachine>().is_none(),
+            "nested pae_state must not mark the container as a chart root"
+        );
+        assert!(
+            world.entity(pae.container).get::<InitialState>().is_none(),
+            "nested pae_state leaves initial-state wiring to the caller"
+        );
+
+        // Container is still a substate of the host state (we set that up
+        // before calling pae_state; the builder did not disturb it).
+        let container_parent = world.entity(pae.container).get::<SubstateOf>().unwrap();
+        assert_eq!(container_parent.0, host_state);
+
+        // PAE substates are substates of the container.
+        for state in [pae.unapplied, pae.applied, pae.active] {
+            let parent = world.entity(state).get::<SubstateOf>().unwrap();
+            assert_eq!(parent.0, pae.container);
+        }
+
+        // Guard edge's RequiresStatsOf points at effect_target, NOT at the
+        // container — this is the key difference from self-targeted PAE.
+        let edges_with_requires = world
+            .query::<(&Source, &RequiresStatsOf)>()
+            .iter(world)
+            .filter(|(src, _)| src.0 == pae.applied)
+            .map(|(_, r)| r.0)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            edges_with_requires,
+            vec![effect_target],
+            "nested PAE's guard edge must target the explicit effect_target"
+        );
+    }
+
+    #[test]
+    fn pae_state_edges_have_expected_source_target_pairs() {
+        let mut app = test_app();
+        let world = app.world_mut();
+
+        let pae = world
+            .run_system_once(|mut commands: Commands| pae_state_machine(&mut commands, None))
+            .unwrap();
+
+        // Collect every (Source, Target) pair that belongs to this PAE
+        // (filter by knowing source is one of our three substates).
+        let edges: Vec<(Entity, Entity)> = world
+            .query::<(&Source, &Target)>()
+            .iter(world)
+            .filter(|(s, _)| s.0 == pae.unapplied || s.0 == pae.applied || s.0 == pae.active)
+            .map(|(s, t)| (s.0, t.0))
+            .collect();
+
+        // Order-insensitive assertion on the five expected edges.
+        let expected: Vec<(Entity, Entity)> = vec![
+            (pae.unapplied, pae.applied),  // PAETryApply
+            (pae.applied, pae.active),     // AlwaysEdge + Guards
+            (pae.active, pae.applied),     // PAESuspend
+            (pae.applied, pae.unapplied),  // PAEUnapplyApproved
+            (pae.active, pae.unapplied),   // PAEUnapplyApproved
+        ];
+        for edge in &expected {
+            assert!(
+                edges.contains(edge),
+                "expected edge {edge:?} missing from PAE chart, found: {edges:?}"
+            );
+        }
+        assert_eq!(edges.len(), expected.len(), "unexpected extra edges: {edges:?}");
     }
 }

@@ -399,6 +399,14 @@ impl Plugin for AvianDieselPlugin {
             impulse::impulse_effect_system,
         ).in_set(bevy_diesel::DieselSet::Effects));
 
+        // Sustained modifier apply — monomorphized here because the generic
+        // fn needs B::Context which can only resolve with a concrete backend.
+        app.add_systems(
+            Update,
+            bevy_diesel::gauge::modifiers::sustained_modifier_apply::<AvianBackend>
+                .in_set(bevy_diesel::gauge::SustainedModifierSet),
+        );
+
         // Avian3d-specific actions
         app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
 

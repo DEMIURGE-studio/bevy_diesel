@@ -139,7 +139,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
 
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)
         app.add_plugins(bevy_gauge::plugin::AttributesPlugin);
-        app.add_plugins(crate::gauge::DieselGaugePlugin::<B::Pos>::default());
+        app.add_plugins(crate::gauge::DieselGaugePlugin::<B>::default());
         app.add_plugins(crate::gauge::pae::DieselPaePlugin);
 
         // Template registry

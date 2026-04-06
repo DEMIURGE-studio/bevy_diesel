@@ -9,7 +9,7 @@ use state_machine::{
     PersistentAttributeEffect, RequirementsOf, RequiresStatsOf,
 };
 
-pub use state_machine::{PaeEntities, pae_state_machine};
+pub use state_machine::{PaeEntities, pae_state, pae_state_machine};
 
 // ---------------------------------------------------------------------------
 // Plugin
@@ -44,20 +44,23 @@ impl Plugin for DieselPaePlugin {
 
 fn pae_exit_system(
     mut removed: RemovedComponents<Active>,
-    q_active_state: Query<(), With<StateComponent<ActiveState>>>,
+    q_active_state: Query<&SubstateOf, With<StateComponent<ActiveState>>>,
     q_activated_mods: Query<&ActivatedModifiers>,
     q_effect_target: Query<&EffectTarget>,
-    q_substate_of: Query<&SubstateOf>,
     mut attributes: AttributesMut,
 ) {
     for entity in removed.read() {
-        // Only act when exiting the ActiveState, not any other PAE state
-        if !q_active_state.contains(entity) {
+        // Only act when exiting the ActiveState, not any other PAE state.
+        // The parent of a PAE ActiveState (via SubstateOf) is the PAE
+        // container, which carries EffectTarget and ActivatedModifiers.
+        // Single-parent-hop works for both top-level PAE (parent = chart
+        // root / container) and nested PAE (parent = intermediate container).
+        let Ok(parent) = q_active_state.get(entity) else {
             continue;
-        }
-        let machine = q_substate_of.root_ancestor(entity);
-        if let Ok(effect_target) = q_effect_target.get(machine) {
-            if let Ok(activated_modifiers) = q_activated_mods.get(machine) {
+        };
+        let container = parent.0;
+        if let Ok(effect_target) = q_effect_target.get(container) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(container) {
                 activated_modifiers.remove(effect_target.0, &mut attributes);
             }
         }
@@ -65,14 +68,21 @@ fn pae_exit_system(
 }
 
 fn pae_enter_system(
-    q_newly_active: Query<&Active, (Added<Active>, With<StateComponent<ActiveState>>)>,
+    q_newly_active: Query<
+        (Entity, &SubstateOf),
+        (Added<Active>, With<StateComponent<ActiveState>>),
+    >,
     q_activated_mods: Query<&ActivatedModifiers>,
     q_effect_target: Query<&EffectTarget>,
     mut attributes: AttributesMut,
 ) {
-    for active in &q_newly_active {
-        if let Ok(effect_target) = q_effect_target.get(active.machine) {
-            if let Ok(activated_modifiers) = q_activated_mods.get(active.machine) {
+    // See comment in pae_exit_system: the PAE container is the direct
+    // SubstateOf parent of an ActiveState, regardless of whether the PAE
+    // is top-level or nested inside a larger chart.
+    for (_active_state, parent) in &q_newly_active {
+        let container = parent.0;
+        if let Ok(effect_target) = q_effect_target.get(container) {
+            if let Ok(activated_modifiers) = q_activated_mods.get(container) {
                 activated_modifiers.apply(effect_target.0, &mut attributes);
             }
         }
