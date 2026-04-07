@@ -21,7 +21,7 @@ pub mod prelude {
         calculate_high_angle_velocity_with_speed, calculate_low_angle_velocity_with_speed,
         calculate_velocity_with_speed, distance_lock,
     };
-    pub use crate::collision::{CollisionFilter, CollisionFilterPlugin, Collides};
+    pub use crate::collision::{CollisionFilter, CollisionFilterPlugin, CollisionLayerFilter, Collides};
     pub use crate::projectile::{
         LinearProjectile, LinearProjectileEffect, ProjectileEffect, ProjectilePlugin,
     };

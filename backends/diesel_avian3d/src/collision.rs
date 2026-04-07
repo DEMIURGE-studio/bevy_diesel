@@ -1,12 +1,50 @@
 use std::fmt::Debug;
 
-use avian3d::prelude::{CollisionStart, Collisions, Position};
+use avian3d::prelude::{CollisionLayers, CollisionStart, Collisions, LayerMask, Position};
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
+use bevy_diesel::bevy_gearbox::MessageValidator;
 use bevy_diesel::effect::GoOffOrigin;
 use bevy_diesel::events::{HasDieselTarget, PosBound};
 use bevy_diesel::target::Target as DieselTarget;
+
+// ---------------------------------------------------------------------------
+// Layer-aware edge validator for collision messages
+// ---------------------------------------------------------------------------
+
+/// Per-edge validator that accepts collisions only when the target entity's
+/// layer membership overlaps the given mask. Insert via
+/// `MessageEdge::<CollidedEntity>::new(Some(CollisionLayerFilter(...)))`.
+///
+/// An empty mask (`LayerMask(0)`) accepts nothing.
+/// The default filter accepts all layers.
+#[derive(Clone, Debug)]
+pub struct CollisionLayerFilter(pub LayerMask);
+
+impl Default for CollisionLayerFilter {
+    fn default() -> Self {
+        Self(LayerMask::ALL)
+    }
+}
+
+impl CollisionLayerFilter {
+    pub fn new(mask: impl Into<LayerMask>) -> Self {
+        Self(mask.into())
+    }
+}
+
+impl MessageValidator<CollidedEntity> for CollisionLayerFilter {
+    fn matches(&self, msg: &CollidedEntity) -> bool {
+        msg.target_layers.has_all(self.0)
+    }
+}
+
+impl MessageValidator<CollidedPosition> for CollisionLayerFilter {
+    fn matches(&self, msg: &CollidedPosition) -> bool {
+        msg.target_layers.has_all(self.0)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Collision event types (concrete Vec3)
@@ -17,16 +55,18 @@ use bevy_diesel::target::Target as DieselTarget;
 pub struct CollidedEntity {
     pub entity: Entity,
     pub target: DieselTarget<Vec3>,
+    /// Layer membership of the target entity at the time of collision.
+    pub target_layers: LayerMask,
 }
 
 impl GearboxMessage for CollidedEntity {
-    type Validator = AcceptAll;
+    type Validator = CollisionLayerFilter;
     fn target(&self) -> Entity { self.entity }
 }
 
 impl CollidedEntity {
-    pub fn new(entity: Entity, target: DieselTarget<Vec3>) -> Self {
-        Self { entity, target }
+    pub fn new(entity: Entity, target: DieselTarget<Vec3>, target_layers: LayerMask) -> Self {
+        Self { entity, target, target_layers }
     }
 }
 
@@ -35,16 +75,18 @@ impl CollidedEntity {
 pub struct CollidedPosition {
     pub entity: Entity,
     pub target: DieselTarget<Vec3>,
+    /// Layer membership of the target entity at the time of collision.
+    pub target_layers: LayerMask,
 }
 
 impl GearboxMessage for CollidedPosition {
-    type Validator = AcceptAll;
+    type Validator = CollisionLayerFilter;
     fn target(&self) -> Entity { self.entity }
 }
 
 impl CollidedPosition {
-    pub fn new(entity: Entity, target: DieselTarget<Vec3>) -> Self {
-        Self { entity, target }
+    pub fn new(entity: Entity, target: DieselTarget<Vec3>, target_layers: LayerMask) -> Self {
+        Self { entity, target, target_layers }
     }
 }
 
@@ -104,28 +146,34 @@ fn unfiltered_collision_system(
     q_collides: Query<(), With<Collides>>,
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
+    q_layers: Query<&CollisionLayers>,
     collisions: Collisions,
     mut entity_writer: MessageWriter<CollidedEntity>,
     mut position_writer: MessageWriter<CollidedPosition>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
-        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
-        emit_entity_if(&q_collides, &q_invoker, &q_position, &mut entity_writer, *collider2, *collider1);
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &q_layers, &mut entity_writer, *collider1, *collider2);
+        emit_entity_if(&q_collides, &q_invoker, &q_position, &q_layers, &mut entity_writer, *collider2, *collider1);
 
         if let Some(contacts) = collisions.get(*collider1, *collider2) {
             if let Some(contact) = contacts.find_deepest_contact() {
                 let position = contact.point;
-                emit_position_if(&q_collides, &mut position_writer, position, *collider1, *collider2);
-                emit_position_if(&q_collides, &mut position_writer, position, *collider2, *collider1);
+                emit_position_if(&q_collides, &q_layers, &mut position_writer, position, *collider1, *collider2);
+                emit_position_if(&q_collides, &q_layers, &mut position_writer, position, *collider2, *collider1);
             }
         }
     }
+}
+
+fn target_layers(q_layers: &Query<&CollisionLayers>, entity: Entity) -> LayerMask {
+    q_layers.get(entity).map(|l| l.memberships).unwrap_or(LayerMask(0))
 }
 
 fn emit_entity_if(
     q_collides: &Query<(), With<Collides>>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
+    q_layers: &Query<&CollisionLayers>,
     writer: &mut MessageWriter<CollidedEntity>,
     ability: Entity,
     target: Entity,
@@ -140,11 +188,13 @@ fn emit_entity_if(
     let collision_pos = q_position.get(ability).ok().map(|p| p.0)
         .or_else(|| q_position.get(target).ok().map(|p| p.0))
         .unwrap_or(Vec3::ZERO);
-    writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
+    let layers = target_layers(q_layers, target);
+    writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos), layers));
 }
 
 fn emit_position_if(
     q_collides: &Query<(), With<Collides>>,
+    q_layers: &Query<&CollisionLayers>,
     writer: &mut MessageWriter<CollidedPosition>,
     position: Vec3,
     ability: Entity,
@@ -153,7 +203,8 @@ fn emit_position_if(
     if q_collides.get(ability).is_err() {
         return;
     }
-    writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
+    let layers = target_layers(q_layers, target);
+    writer.write(CollidedPosition::new(ability, Target::entity(target, position), layers));
 }
 
 // ---------------------------------------------------------------------------
@@ -185,19 +236,20 @@ fn filtered_collision_system<F: CollisionFilter>(
     q_lookup: Query<&F::Lookup>,
     q_invoker: Query<&InvokedBy>,
     q_position: Query<&Position>,
+    q_layers: Query<&CollisionLayers>,
     collisions: Collisions,
     mut entity_writer: MessageWriter<CollidedEntity>,
     mut position_writer: MessageWriter<CollidedPosition>,
 ) {
     for CollisionStart { collider1, collider2, .. } in collision_events.read() {
-        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut entity_writer, *collider1, *collider2);
-        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &mut entity_writer, *collider2, *collider1);
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &q_layers, &mut entity_writer, *collider1, *collider2);
+        emit_entity_filtered(&q_filter, &q_lookup, &q_invoker, &q_position, &q_layers, &mut entity_writer, *collider2, *collider1);
 
         if let Some(contacts) = collisions.get(*collider1, *collider2) {
             if let Some(contact) = contacts.find_deepest_contact() {
                 let position = contact.point;
-                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut position_writer, position, *collider1, *collider2);
-                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &mut position_writer, position, *collider2, *collider1);
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &q_layers, &mut position_writer, position, *collider1, *collider2);
+                emit_position_filtered(&q_filter, &q_lookup, &q_invoker, &q_layers, &mut position_writer, position, *collider2, *collider1);
             }
         }
     }
@@ -227,6 +279,7 @@ fn emit_entity_filtered<F: CollisionFilter>(
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
     q_position: &Query<&Position>,
+    q_layers: &Query<&CollisionLayers>,
     writer: &mut MessageWriter<CollidedEntity>,
     ability: Entity,
     target: Entity,
@@ -235,7 +288,8 @@ fn emit_entity_filtered<F: CollisionFilter>(
         let collision_pos = q_position.get(ability).ok().map(|p| p.0)
             .or_else(|| q_position.get(target).ok().map(|p| p.0))
             .unwrap_or(Vec3::ZERO);
-        writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos)));
+        let layers = target_layers(q_layers, target);
+        writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos), layers));
     }
 }
 
@@ -243,12 +297,14 @@ fn emit_position_filtered<F: CollisionFilter>(
     q_filter: &Query<&F>,
     q_lookup: &Query<&F::Lookup>,
     q_invoker: &Query<&InvokedBy>,
+    q_layers: &Query<&CollisionLayers>,
     writer: &mut MessageWriter<CollidedPosition>,
     position: Vec3,
     ability: Entity,
     target: Entity,
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
-        writer.write(CollidedPosition::new(ability, Target::entity(target, position)));
+        let layers = target_layers(q_layers, target);
+        writer.write(CollidedPosition::new(ability, Target::entity(target, position), layers));
     }
 }
