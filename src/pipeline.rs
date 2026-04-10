@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::backend::SpatialBackend;
+use crate::diagnostics::diesel_debug;
 use crate::effect::{GoOff, GoOffOrigin, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
@@ -18,11 +19,23 @@ pub fn generate_targets<B: SpatialBackend>(
     // Stage 1: Resolve TargetType to a base Target<P>
     let base_target = match &generator.target_type {
         TargetType::Invoker => {
-            let pos = B::position_of(ctx, invoker).unwrap_or_default();
+            let pos = B::position_of(ctx, invoker).unwrap_or_else(|| {
+                diesel_debug!(
+                    "[bevy_diesel] generate_targets: invoker {:?} has no position, defaulting to origin",
+                    invoker,
+                );
+                B::Pos::default()
+            });
             Target::entity(invoker, pos)
         }
         TargetType::Root => {
-            let pos = B::position_of(ctx, root).unwrap_or_default();
+            let pos = B::position_of(ctx, root).unwrap_or_else(|| {
+                diesel_debug!(
+                    "[bevy_diesel] generate_targets: root {:?} has no position, defaulting to origin",
+                    root,
+                );
+                B::Pos::default()
+            });
             Target::entity(root, pos)
         }
         TargetType::InvokerTarget => invoker_target,
@@ -67,14 +80,20 @@ pub fn propagate_system<B: SpatialBackend>(
     for origin in reader.read() {
         let root_entity = origin.entity;
         let passed_target = origin.target;
+        diesel_debug!("[diesel] propagate: received GoOffOrigin for {:?}", root_entity);
 
         let invoker = resolve_invoker(&q_invoker, root_entity);
         let root = resolve_root(&q_child_of, root_entity);
-        let invoker_target: Target<B::Pos> = q_invoker_target
-            .get(invoker)
-            .copied()
-            .map(Target::from)
-            .unwrap_or_default();
+        let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
+            Ok(it) => Target::from(*it),
+            Err(_) => {
+                diesel_debug!(
+                    "[bevy_diesel] propagate_system: invoker {:?} has no InvokerTarget, defaulting to origin",
+                    invoker,
+                );
+                Target::default()
+            }
+        };
 
         // Resolve the root's own target list — apply its TargetMutator if
         // present, otherwise use the passed target verbatim. This matches
@@ -112,9 +131,11 @@ pub fn propagate_system<B: SpatialBackend>(
 
         while let Some((parent, in_targets)) = stack.pop() {
             let Ok(subs) = q_sub_effects.get(parent) else {
+                diesel_debug!("[diesel]   {:?} has no SubEffects — leaf node", parent);
                 continue;
             };
 
+            diesel_debug!("[diesel]   {:?} has {} sub-effects", parent, subs.into_iter().count());
             for &child in subs.into_iter() {
                 let out_targets = if let Ok(Some(mutator)) = q_target_mutator.get(child) {
                     let mut aggregated = Vec::new();
@@ -144,6 +165,7 @@ pub fn propagate_system<B: SpatialBackend>(
                 };
 
                 // Write one GoOff per target (batch messages instead of Vec)
+                diesel_debug!("[diesel]   -> writing GoOff for child {:?}, {} targets", child, out_targets.len());
                 for &target in &out_targets {
                     writer.write(GoOff::new(child, target));
                 }

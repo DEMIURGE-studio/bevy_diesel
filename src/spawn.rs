@@ -9,6 +9,7 @@ use bevy_gauge::prelude::{AttributeDerived, AttributesMut};
 use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
+use crate::diagnostics::diesel_debug;
 use crate::effect::{GoOff, GoOffOrigin};
 use crate::invoke::Ability;
 use crate::invoker::InvokedBy;
@@ -56,6 +57,10 @@ impl TemplateRegistry {
         id: &str,
     ) -> Option<&(dyn Fn(&mut Commands, Option<Entity>) -> Entity + Send + Sync)> {
         self.templates.get(id).map(|f| f.as_ref())
+    }
+
+    pub fn keys(&self) -> Vec<&str> {
+        self.templates.keys().map(|s| s.as_str()).collect()
     }
 }
 
@@ -263,15 +268,24 @@ pub fn spawn_system<B: SpatialBackend>(
         let passed = go_off.target;
 
         let invoker = q_invoker.root_ancestor(effect_entity);
-        let invoker_target: Target<B::Pos> = q_invoker_target
-            .get(invoker)
-            .copied()
-            .map(Target::from)
-            .unwrap_or_default();
+        let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
+            Ok(it) => Target::from(*it),
+            Err(_) => {
+                diesel_debug!(
+                    "[bevy_diesel] spawn_system: invoker {:?} has no InvokerTarget, defaulting to origin",
+                    invoker,
+                );
+                Target::default()
+            }
+        };
         let Ok(spawn_config) = q_effect.get(effect_entity) else {
+            diesel_debug!("[diesel] spawn_system: GoOff for {:?} — no SpawnConfig, skipping", effect_entity);
             continue;
         };
         let root = q_child_of.root_ancestor(effect_entity);
+
+        diesel_debug!("[diesel] spawn_system: received GoOff for {:?}, template='{}', invoker={:?}",
+            effect_entity, spawn_config.template_id, invoker);
 
         let mut spawn_targets = generate_targets::<B>(
             &spawn_config.spawn_position_generator,
@@ -284,8 +298,10 @@ pub fn spawn_system<B: SpatialBackend>(
         );
 
         if spawn_targets.is_empty() {
+            diesel_debug!("[diesel]   spawn_targets EMPTY — skipping! invoker={:?} invoker_target={:?}", invoker, invoker_target);
             continue;
         }
+        diesel_debug!("[diesel]   spawn_targets count: {}, positions: {:?}", spawn_targets.len(), spawn_targets.iter().map(|t| t.position).collect::<Vec<_>>());
 
         let target_targets = if let Some(target_generator) = &spawn_config.spawn_target_generator {
             let targets = generate_targets_with_spawn_positions::<B>(
@@ -298,6 +314,7 @@ pub fn spawn_system<B: SpatialBackend>(
                 &mut ctx,
             );
             if targets.is_empty() {
+                diesel_debug!("[diesel]   target_targets EMPTY — skipping!");
                 continue;
             }
             Some(targets)
@@ -315,6 +332,11 @@ pub fn spawn_system<B: SpatialBackend>(
                 TargetType::Position(_) => None,
             };
             if parent.is_none() {
+                warn!(
+                    "[bevy_diesel] spawn_system: as_child_of={:?} resolved to None for \
+                     effect {:?} (template='{}', invoker={:?}). Spawn skipped.",
+                    parent_target_type, effect_entity, spawn_config.template_id, invoker,
+                );
                 continue;
             }
             parent
@@ -330,10 +352,17 @@ pub fn spawn_system<B: SpatialBackend>(
                 spawn_target.position,
                 parent_entity,
             );
-            template_registry.get(&spawn_config.template_id).unwrap()(
-                &mut commands,
-                Some(spawned_entity),
-            );
+            let Some(template_fn) = template_registry.get(&spawn_config.template_id) else {
+                panic!(
+                    "[bevy_diesel] Template '{}' not found in TemplateRegistry. \
+                     Registered: {:?}. Ensure the template is registered before \
+                     any SpawnConfig references it.",
+                    spawn_config.template_id,
+                    template_registry.keys(),
+                );
+            };
+            diesel_debug!("[diesel] spawning entity {:?} from template '{}'", spawned_entity, spawn_config.template_id);
+            template_fn(&mut commands, Some(spawned_entity));
 
             // Register gauge sources for cross-entity attribute expressions.
             // The aliases are stored in the DependencyGraph immediately; when
@@ -376,7 +405,13 @@ pub fn spawn_system<B: SpatialBackend>(
                 Target::entity(spawned_entity, spawn_target.position),
             ));
 
-            let invoker_position = B::position_of(&ctx, invoker).unwrap_or_default();
+            let invoker_position = B::position_of(&ctx, invoker).unwrap_or_else(|| {
+                diesel_debug!(
+                    "[bevy_diesel] spawn_system: invoker {:?} has no position, defaulting to origin",
+                    invoker,
+                );
+                B::Pos::default()
+            });
             spawn_invoker_writer.write(OnSpawnInvoker::new(
                 spawned_entity,
                 Target::entity(invoker, invoker_position),

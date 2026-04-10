@@ -19,3 +19,4 @@ bevy_gearbox = { path = "../bevy_gearbox", features = ["gauge"] }
 [features]
 default = []
 server = ["bevy_gearbox/server"]
+diesel_diagnostics = []

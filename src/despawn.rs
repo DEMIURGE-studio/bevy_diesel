@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
+use crate::diagnostics::diesel_debug;
 use crate::effect::GoOff;
 
 #[derive(Component, Default, Clone, Copy)]
@@ -29,6 +30,10 @@ pub fn queue_despawn_system<P: Clone + Copy + Send + Sync + Default + Debug + 's
     for go_off in reader.read() {
         let trigger_entity = go_off.entity;
         let Ok(_) = query.get(trigger_entity) else {
+            diesel_debug!(
+                "[bevy_diesel] queue_despawn_system: GoOff for {:?} but no QueueDespawn, skipping",
+                trigger_entity,
+            );
             continue;
         };
 

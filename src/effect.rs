@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
 
 use crate::backend::SpatialBackend;
+use crate::diagnostics::diesel_debug;
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::pipeline::generate_targets;
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
@@ -177,14 +178,23 @@ pub fn go_off_on_entry<B: SpatialBackend>(
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut writer: MessageWriter<GoOffOrigin<B::Pos>>,
 ) {
+    if q_new.is_empty() {
+        return;
+    }
+    diesel_debug!("[diesel] go_off_on_entry: {} newly-active GoOffConfig entities", q_new.iter().count());
     for (entity, config) in &q_new {
         let invoker = resolve_invoker(&q_invoker, entity);
         let root = resolve_root(&q_child_of, entity);
-        let invoker_target: Target<B::Pos> = q_invoker_target
-            .get(invoker)
-            .copied()
-            .map(Target::from)
-            .unwrap_or_default();
+        let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
+            Ok(it) => Target::from(*it),
+            Err(_) => {
+                diesel_debug!(
+                    "[bevy_diesel] go_off_on_entry: invoker {:?} has no InvokerTarget, defaulting to origin",
+                    invoker,
+                );
+                Target::default()
+            }
+        };
 
         // Resolve the generator into a list of targets. The `passed` input
         // is the invoker target by default — only relevant if the generator
@@ -206,7 +216,9 @@ pub fn go_off_on_entry<B: SpatialBackend>(
             invoker_target.position,
         );
 
+        diesel_debug!("[diesel] go_off_on_entry: entity={:?} invoker={:?} targets_count={}", entity, invoker, targets.len());
         for target in targets {
+            diesel_debug!("[diesel]   -> writing GoOffOrigin for {:?} target={:?}", entity, target);
             writer.write(GoOffOrigin::new(entity, target));
         }
     }

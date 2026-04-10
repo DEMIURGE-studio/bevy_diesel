@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
 use bevy_gauge::AttributeComponent;
 
+use crate::diagnostics::diesel_debug;
 use crate::events::{OnRepeat, PosBound};
 use crate::target::Target as DieselTarget;
 
@@ -73,10 +74,17 @@ pub fn repeater_tick<P: PosBound>(
         } else {
             // Exhausted — reset for next cycle and emit Done to parent
             repeater.remaining = repeater.initial;
-            let parent = q_substate_of
-                .get(entity)
-                .map(|s| s.0)
-                .unwrap_or(entity);
+            let parent = match q_substate_of.get(entity) {
+                Ok(s) => s.0,
+                Err(_) => {
+                    diesel_debug!(
+                        "[diesel] repeater_tick: entity {:?} has Repeater but no \
+                         SubstateOf. Done will target itself, which could be a bug.",
+                        entity,
+                    );
+                    entity
+                }
+            };
             writer_done.write(Done::new(parent));
         }
     }

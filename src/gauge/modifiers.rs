@@ -5,6 +5,7 @@ use bevy_gauge::prelude::{AttributesMut, ModifierSet};
 use bevy_gearbox::prelude::Active;
 
 use crate::backend::SpatialBackend;
+use crate::diagnostics::diesel_debug;
 use crate::effect::GoOff;
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::pipeline::generate_targets;
@@ -82,11 +83,16 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
     for (entity, modifiers, config) in &q_new {
         let invoker = resolve_invoker(&q_invoker, entity);
         let root = resolve_root(&q_child_of, entity);
-        let invoker_target: Target<B::Pos> = q_invoker_target
-            .get(invoker)
-            .copied()
-            .map(Target::from)
-            .unwrap_or_default();
+        let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
+            Ok(it) => Target::from(*it),
+            Err(_) => {
+                diesel_debug!(
+                    "[bevy_diesel] sustained_modifier_apply: invoker {:?} has no InvokerTarget, defaulting to origin",
+                    invoker,
+                );
+                Target::default()
+            }
+        };
 
         let targets = generate_targets::<B>(
             &config.generator,
@@ -102,9 +108,16 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
         // are single-target by nature (you can't "un-apply from N entities"
         // without tracking all of them). If a multi-target sustained effect
         // is needed later, SustainedTarget becomes a Vec.
+        let target_count = targets.len();
         if let Some(target) = targets.into_iter().find_map(|t| t.entity) {
             modifiers.apply(target, &mut attributes);
             commands.entity(entity).insert(SustainedTarget(target));
+        } else {
+            diesel_debug!(
+                "[bevy_diesel] sustained_modifier_apply: entity {:?} resolved {} targets but \
+                 none had an entity. Sustained modifiers require an entity target.",
+                entity, target_count,
+            );
         }
     }
 }
@@ -113,12 +126,21 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
 /// [`SustainedTarget`] and remove the modifiers.
 pub fn sustained_modifier_remove(
     mut removed: RemovedComponents<Active>,
-    q_sustained: Query<(&AttributeModifiers, &SustainedTarget)>,
+    q_modifiers: Query<&AttributeModifiers>,
+    q_sustained_target: Query<&SustainedTarget>,
     mut attributes: AttributesMut,
     mut commands: Commands,
 ) {
     for entity in removed.read() {
-        let Ok((modifiers, sustained_target)) = q_sustained.get(entity) else {
+        let Ok(modifiers) = q_modifiers.get(entity) else {
+            continue;
+        };
+        let Ok(sustained_target) = q_sustained_target.get(entity) else {
+            warn!(
+                "[bevy_diesel] sustained_modifier_remove: entity {:?} lost Active and has \
+                 AttributeModifiers but no SustainedTarget. Modifiers may have leaked.",
+                entity,
+            );
             continue;
         };
         modifiers.remove(sustained_target.0, &mut attributes);

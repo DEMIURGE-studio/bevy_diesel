@@ -20,4 +20,5 @@ rand = "0.9"
 [features]
 default = []
 server = ["bevy_diesel/server"]
+diesel_diagnostics = ["bevy_diesel/diesel_diagnostics"]
 trace_tracy = ["bevy/trace_tracy"]

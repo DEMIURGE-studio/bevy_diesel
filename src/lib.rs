@@ -1,3 +1,4 @@
+pub(crate) mod diagnostics;
 pub mod ability_pool;
 pub mod backend;
 pub mod despawn;
