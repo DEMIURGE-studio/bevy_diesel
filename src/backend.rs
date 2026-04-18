@@ -41,12 +41,6 @@ pub trait SpatialBackend: Send + Sync + 'static {
     type Filter: Clone + Send + Sync + Default + Debug + 'static;
 
     /// Runtime context bundled as a `SystemParam` (spatial queries, transforms, RNG, etc.).
-    ///
-    /// **Important:** All resources and components required by this `SystemParam` must be
-    /// registered by the backend's `plugin()` implementation or by plugins added before it.
-    /// If a required resource is missing (e.g., `EntropyPlugin` for `Single<WyRand>`),
-    /// every diesel system that takes this Context will silently fail to run — Bevy skips
-    /// systems whose `Single` params cannot be satisfied.
     type Context<'w, 's>: SystemParam;
 
     /// Apply an offset to a position.
