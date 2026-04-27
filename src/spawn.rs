@@ -287,7 +287,7 @@ pub fn spawn_system<B: SpatialBackend>(
         diesel_debug!("[diesel] spawn_system: received GoOff for {:?}, template='{}', invoker={:?}",
             effect_entity, spawn_config.template_id, invoker);
 
-        let mut spawn_targets = generate_targets::<B>(
+        let spawn_targets: Vec<Target<B::Pos>> = generate_targets::<B>(
             &spawn_config.spawn_position_generator,
             &mut ctx,
             invoker,
@@ -295,7 +295,10 @@ pub fn spawn_system<B: SpatialBackend>(
             root,
             B::Pos::default(),
             passed,
-        );
+        )
+        .into_iter()
+        .map(|(t, _)| t)
+        .collect();
 
         if spawn_targets.is_empty() {
             diesel_debug!("[diesel]   spawn_targets EMPTY — skipping! invoker={:?} invoker_target={:?}", invoker, invoker_target);
@@ -441,7 +444,7 @@ fn generate_targets_with_spawn_positions<B: SpatialBackend>(
                 .get(idx % in_targets.len())
                 .copied()
                 .unwrap_or(*spawn_target);
-            let mut targets = generate_targets::<B>(
+            let targets = generate_targets::<B>(
                 generator,
                 ctx,
                 invoker,
@@ -450,13 +453,13 @@ fn generate_targets_with_spawn_positions<B: SpatialBackend>(
                 spawn_target.position,
                 passed_target,
             );
-            all_targets.append(&mut targets);
+            all_targets.extend(targets.into_iter().map(|(t, _)| t));
         }
         all_targets
     } else {
         let mut all_targets = Vec::new();
         for passed_target in in_targets.iter() {
-            let mut t = generate_targets::<B>(
+            let t = generate_targets::<B>(
                 generator,
                 ctx,
                 invoker,
@@ -465,7 +468,7 @@ fn generate_targets_with_spawn_positions<B: SpatialBackend>(
                 B::Pos::default(),
                 *passed_target,
             );
-            all_targets.append(&mut t);
+            all_targets.extend(t.into_iter().map(|(t, _)| t));
         }
         all_targets
     }

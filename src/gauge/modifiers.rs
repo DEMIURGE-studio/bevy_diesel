@@ -109,7 +109,7 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
         // without tracking all of them). If a multi-target sustained effect
         // is needed later, SustainedTarget becomes a Vec.
         let target_count = targets.len();
-        if let Some(target) = targets.into_iter().find_map(|t| t.entity) {
+        if let Some(target) = targets.into_iter().find_map(|(t, _)| t.entity) {
             modifiers.apply(target, &mut attributes);
             commands.entity(entity).insert(SustainedTarget(target));
         } else {

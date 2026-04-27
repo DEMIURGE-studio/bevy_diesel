@@ -131,25 +131,41 @@ impl SpatialBackend for AvianBackend {
         origin: Vec3,
         gatherer: &AvianGatherer,
         exclude: Entity,
-    ) -> Vec<bevy_diesel::target::Target<Vec3>> {
+    ) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)> {
         match gatherer {
             // Position generators - read embedded count, produce N points
             AvianGatherer::Sphere { radius, count } => {
                 let n = count.resolve_count(&mut ctx.rng);
+                let total = n as f32;
                 (0..n)
-                    .map(|_| {
-                        let pos = origin + random_in_sphere(&mut ctx.rng, *radius);
-                        bevy_diesel::target::Target::position(pos)
+                    .map(|i| {
+                        let offset = random_in_sphere(&mut ctx.rng, *radius);
+                        let pos = origin + offset;
+                        let scope = vec![
+                            ("gather_distance", offset.length()),
+                            ("gather_radius", *radius),
+                            ("gather_rank", i as f32),
+                            ("gather_count", total),
+                        ];
+                        (bevy_diesel::target::Target::position(pos), scope)
                     })
                     .collect()
             }
             AvianGatherer::Circle { radius, count } => {
                 let n = count.resolve_count(&mut ctx.rng);
+                let total = n as f32;
                 (0..n)
-                    .map(|_| {
+                    .map(|i| {
                         let v = random_in_circle(&mut ctx.rng, *radius);
-                        let pos = origin + Vec3::new(v.x, 0.0, v.y);
-                        bevy_diesel::target::Target::position(pos)
+                        let offset = Vec3::new(v.x, 0.0, v.y);
+                        let pos = origin + offset;
+                        let scope = vec![
+                            ("gather_distance", offset.length()),
+                            ("gather_radius", *radius),
+                            ("gather_rank", i as f32),
+                            ("gather_count", total),
+                        ];
+                        (bevy_diesel::target::Target::position(pos), scope)
                     })
                     .collect()
             }
@@ -158,15 +174,21 @@ impl SpatialBackend for AvianBackend {
                 count,
             } => {
                 let n = count.resolve_count(&mut ctx.rng);
+                let total = n as f32;
                 (0..n)
-                    .map(|_| {
-                        let pos = origin
-                            + Vec3::new(
-                                rand_f32_range(&mut ctx.rng, -half_extents.x, half_extents.x),
-                                rand_f32_range(&mut ctx.rng, -half_extents.y, half_extents.y),
-                                rand_f32_range(&mut ctx.rng, -half_extents.z, half_extents.z),
-                            );
-                        bevy_diesel::target::Target::position(pos)
+                    .map(|i| {
+                        let offset = Vec3::new(
+                            rand_f32_range(&mut ctx.rng, -half_extents.x, half_extents.x),
+                            rand_f32_range(&mut ctx.rng, -half_extents.y, half_extents.y),
+                            rand_f32_range(&mut ctx.rng, -half_extents.z, half_extents.z),
+                        );
+                        let pos = origin + offset;
+                        let scope = vec![
+                            ("gather_distance", offset.length()),
+                            ("gather_rank", i as f32),
+                            ("gather_count", total),
+                        ];
+                        (bevy_diesel::target::Target::position(pos), scope)
                     })
                     .collect()
             }
@@ -176,12 +198,19 @@ impl SpatialBackend for AvianBackend {
                 count,
             } => {
                 let n = count.resolve_count(&mut ctx.rng);
+                let total = n as f32;
                 let dir = direction.normalize_or_zero();
                 (0..n)
-                    .map(|_| {
+                    .map(|i| {
                         let dist = rand_f32_range(&mut ctx.rng, 0.0, *length);
                         let pos = origin + dir * dist;
-                        bevy_diesel::target::Target::position(pos)
+                        let scope = vec![
+                            ("gather_distance", dist),
+                            ("gather_length", *length),
+                            ("gather_rank", i as f32),
+                            ("gather_count", total),
+                        ];
+                        (bevy_diesel::target::Target::position(pos), scope)
                     })
                     .collect()
             }
@@ -205,6 +234,17 @@ impl SpatialBackend for AvianBackend {
                     &ctx.transforms,
                 );
                 sort_by_distance(&mut targets, &origin);
+                // Rewrite rank now that order is stable.
+                let total = targets.len() as f32;
+                for (i, (_, scope)) in targets.iter_mut().enumerate() {
+                    for (key, val) in scope.iter_mut() {
+                        match *key {
+                            "gather_rank" => *val = i as f32,
+                            "gather_count" => *val = total,
+                            _ => {}
+                        }
+                    }
+                }
                 targets
             }
         }
@@ -212,11 +252,11 @@ impl SpatialBackend for AvianBackend {
 
     fn apply_filter(
         ctx: &mut AvianContext,
-        targets: Vec<bevy_diesel::target::Target<Vec3>>,
+        targets: Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)>,
         filter: &AvianFilter,
         _invoker: Entity,
         _origin: Vec3,
-    ) -> Vec<bevy_diesel::target::Target<Vec3>> {
+    ) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)> {
         // TODO: line_of_sight filtering using ctx.spatial_query
 
         // Count limiting
@@ -433,7 +473,7 @@ fn find_entities_in_radius(
     spatial_query: &SpatialQuery,
     exclude: Entity,
     q_transform: &Query<&Transform>,
-) -> Vec<bevy_diesel::target::Target<Vec3>> {
+) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)> {
     let hits = spatial_query.shape_hits(
         &Collider::sphere(radius),
         origin,
@@ -444,7 +484,8 @@ fn find_entities_in_radius(
         &SpatialQueryFilter::default(),
     );
 
-    hits.iter()
+    let mut out: Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)> = hits
+        .iter()
         .filter_map(|hit| {
             if hit.entity == exclude {
                 return None;
@@ -453,9 +494,31 @@ fn find_entities_in_radius(
                 .get(hit.entity)
                 .map(|t| t.translation)
                 .unwrap_or(origin);
-            Some(bevy_diesel::target::Target::entity(hit.entity, position))
+            let distance = position.distance(origin);
+            Some((
+                bevy_diesel::target::Target::entity(hit.entity, position),
+                vec![
+                    ("gather_distance", distance),
+                    ("gather_radius", radius),
+                    ("gather_rank", 0.0),
+                    ("gather_count", 0.0),
+                ],
+            ))
         })
-        .collect()
+        .collect();
+
+    // Fill rank + count now that the final set is known.
+    let total = out.len() as f32;
+    for (i, (_, scope)) in out.iter_mut().enumerate() {
+        for (key, val) in scope.iter_mut() {
+            match *key {
+                "gather_rank" => *val = i as f32,
+                "gather_count" => *val = total,
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -580,10 +643,10 @@ impl NumberType {
 
 /// Limit targets via reservoir sampling.
 fn limit_count(
-    targets: Vec<bevy_diesel::target::Target<Vec3>>,
+    targets: Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)>,
     number: &NumberType,
     rng: &mut dyn RngCore,
-) -> Vec<bevy_diesel::target::Target<Vec3>> {
+) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)> {
     let max_count = match number.resolve_limit(rng) {
         Some(n) => n,
         None => return targets,
@@ -610,10 +673,10 @@ fn limit_count(
 
 /// Sort targets by distance (nearest first).
 fn sort_by_distance(
-    targets: &mut [bevy_diesel::target::Target<Vec3>],
+    targets: &mut [(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::GatherScope)],
     origin: &Vec3,
 ) {
-    targets.sort_by(|a, b| {
+    targets.sort_by(|(a, _), (b, _)| {
         let dist_a = a.position.distance(*origin);
         let dist_b = b.position.distance(*origin);
         dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)

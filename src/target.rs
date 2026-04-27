@@ -7,6 +7,7 @@ use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
 
+pub type GatherScope = Vec<(&'static str, f32)>;
 // ---------------------------------------------------------------------------
 // InvokerTarget<P>
 // ---------------------------------------------------------------------------

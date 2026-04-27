@@ -4,7 +4,7 @@ use crate::backend::SpatialBackend;
 use crate::diagnostics::diesel_debug;
 use crate::effect::{GoOff, GoOffOrigin, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
-use crate::target::{InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
+use crate::target::{GatherScope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
 /// Resolve → offset → gather. Returns unfiltered results.
 pub fn generate_targets<B: SpatialBackend>(
@@ -15,7 +15,7 @@ pub fn generate_targets<B: SpatialBackend>(
     root: Entity,
     spawn_pos: B::Pos,
     passed: Target<B::Pos>,
-) -> Vec<Target<B::Pos>> {
+) -> Vec<(Target<B::Pos>, GatherScope)> {
     // Stage 1: Resolve TargetType to a base Target<P>
     let base_target = match &generator.target_type {
         TargetType::Invoker => {
@@ -54,11 +54,11 @@ pub fn generate_targets<B: SpatialBackend>(
     // Stage 3: Gather
     match &generator.gatherer {
         None => {
-            // Identity: return the resolved+offset target as-is
-            vec![offset_target]
+            // Identity: return the resolved+offset target with no scope.
+            vec![(offset_target, GatherScope::new())]
         }
         Some(gatherer) => {
-            // Fully delegated to backend
+            // Fully delegated to backend; backend attaches per-target scope.
             B::gather(ctx, offset_target.position, gatherer, invoker)
         }
     }
@@ -95,10 +95,8 @@ pub fn propagate_system<B: SpatialBackend>(
             }
         };
 
-        // Resolve the root's own target list — apply its TargetMutator if
-        // present, otherwise use the passed target verbatim. This matches
-        // the behavior applied to children below.
-        let root_targets: Vec<Target<B::Pos>> =
+        let origin_gather = origin.gather.clone();
+        let root_targets: Vec<(Target<B::Pos>, GatherScope)> =
             if let Ok(Some(mutator)) = q_target_mutator.get(root_entity) {
                 let mut targets = generate_targets::<B>(
                     &mutator.generator,
@@ -118,16 +116,17 @@ pub fn propagate_system<B: SpatialBackend>(
                 );
                 targets
             } else {
-                vec![passed_target]
+                vec![(passed_target, origin_gather)]
             };
 
         // Fire GoOff on the root entity itself (one per resolved target).
-        for &target in &root_targets {
-            writer.write(GoOff::new(root_entity, target));
+        for (target, gather) in &root_targets {
+            writer.write(GoOff::with_gather(root_entity, *target, gather.clone()));
         }
 
-        // Walk the tree: (entity, targets_for_this_entity)
-        let mut stack: Vec<(Entity, Vec<Target<B::Pos>>)> = vec![(root_entity, root_targets)];
+        // Walk the tree: (entity, (target, scope) pairs for this entity)
+        let mut stack: Vec<(Entity, Vec<(Target<B::Pos>, GatherScope)>)> =
+            vec![(root_entity, root_targets)];
 
         while let Some((parent, in_targets)) = stack.pop() {
             let Ok(subs) = q_sub_effects.get(parent) else {
@@ -137,37 +136,38 @@ pub fn propagate_system<B: SpatialBackend>(
 
             diesel_debug!("[diesel]   {:?} has {} sub-effects", parent, subs.into_iter().count());
             for &child in subs.into_iter() {
-                let out_targets = if let Ok(Some(mutator)) = q_target_mutator.get(child) {
-                    let mut aggregated = Vec::new();
-                    for passed in in_targets.iter() {
-                        let mut targets = generate_targets::<B>(
-                            &mutator.generator,
-                            &mut ctx,
-                            invoker,
-                            invoker_target,
-                            root,
-                            B::Pos::default(),
-                            *passed,
-                        );
-                        let origin_pos = passed.position;
-                        targets = B::apply_filter(
-                            &mut ctx,
-                            targets,
-                            &mutator.generator.filter,
-                            invoker,
-                            origin_pos,
-                        );
-                        aggregated.append(&mut targets);
-                    }
-                    aggregated
-                } else {
-                    in_targets.clone()
-                };
+                let out_targets: Vec<(Target<B::Pos>, GatherScope)> =
+                    if let Ok(Some(mutator)) = q_target_mutator.get(child) {
+                        let mut aggregated = Vec::new();
+                        for (passed, _parent_scope) in in_targets.iter() {
+                            let mut targets = generate_targets::<B>(
+                                &mutator.generator,
+                                &mut ctx,
+                                invoker,
+                                invoker_target,
+                                root,
+                                B::Pos::default(),
+                                *passed,
+                            );
+                            let origin_pos = passed.position;
+                            targets = B::apply_filter(
+                                &mut ctx,
+                                targets,
+                                &mutator.generator.filter,
+                                invoker,
+                                origin_pos,
+                            );
+                            aggregated.append(&mut targets);
+                        }
+                        aggregated
+                    } else {
+                        in_targets.clone()
+                    };
 
-                // Write one GoOff per target (batch messages instead of Vec)
+                // Write one GoOff per (target, scope) pair.
                 diesel_debug!("[diesel]   -> writing GoOff for child {:?}, {} targets", child, out_targets.len());
-                for &target in &out_targets {
-                    writer.write(GoOff::new(child, target));
+                for (target, gather) in &out_targets {
+                    writer.write(GoOff::with_gather(child, *target, gather.clone()));
                 }
                 stack.push((child, out_targets));
             }

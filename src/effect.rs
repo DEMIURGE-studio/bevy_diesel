@@ -8,7 +8,7 @@ use crate::backend::SpatialBackend;
 use crate::diagnostics::diesel_debug;
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::pipeline::generate_targets;
-use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
+use crate::target::{GatherScope, InvokerTarget, Target, TargetGenerator};
 
 // ---------------------------------------------------------------------------
 // GoOffOrigin<P> — root trigger, consumed by propagate_system
@@ -21,11 +21,24 @@ use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
 pub struct GoOffOrigin<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
     pub target: Target<P>,
+    pub gather: GatherScope,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
     pub fn new(entity: Entity, target: Target<P>) -> Self {
-        Self { entity, target }
+        Self {
+            entity,
+            target,
+            gather: GatherScope::new(),
+        }
+    }
+
+    pub fn with_gather(entity: Entity, target: Target<P>, gather: GatherScope) -> Self {
+        Self {
+            entity,
+            target,
+            gather,
+        }
     }
 }
 
@@ -41,11 +54,24 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
     pub target: Target<P>,
+    pub gather: GatherScope,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
     pub fn new(entity: Entity, target: Target<P>) -> Self {
-        Self { entity, target }
+        Self {
+            entity,
+            target,
+            gather: GatherScope::new(),
+        }
+    }
+
+    pub fn with_gather(entity: Entity, target: Target<P>, gather: GatherScope) -> Self {
+        Self {
+            entity,
+            target,
+            gather,
+        }
     }
 }
 
@@ -217,9 +243,9 @@ pub fn go_off_on_entry<B: SpatialBackend>(
         );
 
         diesel_debug!("[diesel] go_off_on_entry: entity={:?} invoker={:?} targets_count={}", entity, invoker, targets.len());
-        for target in targets {
+        for (target, gather) in targets {
             diesel_debug!("[diesel]   -> writing GoOffOrigin for {:?} target={:?}", entity, target);
-            writer.write(GoOffOrigin::new(entity, target));
+            writer.write(GoOffOrigin::with_gather(entity, target, gather));
         }
     }
 }
