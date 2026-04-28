@@ -114,6 +114,8 @@ pub fn propagate_system<B: SpatialBackend>(
                     invoker,
                     passed_target.position,
                 );
+                // Merge origin scope; gather keys win on collision.
+                merge_scope_into_targets(&mut targets, &origin_gather);
                 targets
             } else {
                 vec![(passed_target, origin_gather)]
@@ -139,7 +141,7 @@ pub fn propagate_system<B: SpatialBackend>(
                 let out_targets: Vec<(Target<B::Pos>, GatherScope)> =
                     if let Ok(Some(mutator)) = q_target_mutator.get(child) {
                         let mut aggregated = Vec::new();
-                        for (passed, _parent_scope) in in_targets.iter() {
+                        for (passed, parent_scope) in in_targets.iter() {
                             let mut targets = generate_targets::<B>(
                                 &mutator.generator,
                                 &mut ctx,
@@ -157,6 +159,8 @@ pub fn propagate_system<B: SpatialBackend>(
                                 invoker,
                                 origin_pos,
                             );
+                            // Inherit parent scope; gather keys win.
+                            merge_scope_into_targets(&mut targets, parent_scope);
                             aggregated.append(&mut targets);
                         }
                         aggregated
@@ -177,3 +181,20 @@ pub fn propagate_system<B: SpatialBackend>(
 
 // Keep the old name as an alias for code that references it
 pub use propagate_system as propagate_observer;
+
+/// Add `parent_scope` keys to each target's scope; existing keys win.
+fn merge_scope_into_targets<P: Clone + Copy + Send + Sync + Default + std::fmt::Debug + 'static>(
+    targets: &mut Vec<(Target<P>, GatherScope)>,
+    parent_scope: &GatherScope,
+) {
+    if parent_scope.is_empty() {
+        return;
+    }
+    for (_, scope) in targets.iter_mut() {
+        for (k, v) in parent_scope {
+            if !scope.iter().any(|(pk, _)| *pk == *k) {
+                scope.push((*k, *v));
+            }
+        }
+    }
+}

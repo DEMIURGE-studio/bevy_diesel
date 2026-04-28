@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy_gearbox::{AcceptAll, BlockedEdges, GearboxMessage, Matched};
 
-use crate::effect::GoOffOrigin;
+use crate::effect::{GoOffOrigin, MessageScope};
 use crate::target::Target;
 
 // ---------------------------------------------------------------------------
@@ -103,15 +103,27 @@ impl<P: PosBound> HasDieselTarget<P> for StopInvoke<P> {
     fn diesel_target(&self) -> Target<P> { self.target }
 }
 
-/// Generic side-effect system: reads surviving `Matched<M>` and writes
-/// `GoOffOrigin<P>`. Runs in [`SideEffectPhase`](bevy_gearbox::GearboxPhase::SideEffectPhase).
-pub fn go_off_side_effect<M: HasDieselTarget<P> + GearboxMessage, P: PosBound>(
+impl<P: PosBound> MessageScope for OnRepeat<P> {}
+impl<P: PosBound> MessageScope for StartInvoke<P> {}
+impl<P: PosBound> MessageScope for StopInvoke<P> {}
+
+/// Reads surviving `Matched<M>` and writes `GoOffOrigin<P>` with the
+/// message's `MessageScope` payload attached.
+pub fn go_off_side_effect<M, P>(
     mut reader: MessageReader<Matched<M>>,
     blocked: Res<BlockedEdges>,
     mut writer: MessageWriter<GoOffOrigin<P>>,
-) {
+)
+where
+    M: HasDieselTarget<P> + GearboxMessage + MessageScope,
+    P: PosBound,
+{
     for matched in reader.read() {
         if blocked.is_blocked(matched.edge) { continue; }
-        writer.write(GoOffOrigin::new(matched.target, matched.message.diesel_target()));
+        writer.write(GoOffOrigin::with_gather(
+            matched.target,
+            matched.message.diesel_target(),
+            matched.message.scope(),
+        ));
     }
 }

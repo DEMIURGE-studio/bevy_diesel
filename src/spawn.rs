@@ -75,6 +75,9 @@ pub struct SpawnConfig<B: SpatialBackend> {
     pub spawn_position_generator: TargetGenerator<B>,
     pub spawn_target_generator: Option<TargetGenerator<B>>,
     pub as_child_of: Option<TargetType<B::Pos>>,
+    /// Copy gather scope onto spawned entity as base attributes
+    /// (suffix stripped).
+    pub inherit_scope: bool,
     #[allow(dead_code)]
     _phantom: PhantomData<B>,
 }
@@ -89,6 +92,7 @@ impl<B: SpatialBackend> SpawnConfig<B> {
             },
             spawn_target_generator: None,
             as_child_of: None,
+            inherit_scope: false,
             _phantom: PhantomData,
         }
     }
@@ -148,6 +152,12 @@ impl<B: SpatialBackend> SpawnConfig<B> {
     }
     pub fn as_child_of_passed(mut self) -> Self {
         self.as_child_of = Some(TargetType::Passed);
+        self
+    }
+
+    /// Inject gather scope as base attributes on the spawned entity.
+    pub fn with_scope_inheritance(mut self) -> Self {
+        self.inherit_scope = true;
         self
     }
 }
@@ -237,6 +247,8 @@ macro_rules! spawn_event {
         impl<P: crate::events::PosBound> crate::events::HasDieselTarget<P> for $Name<P> {
             fn diesel_target(&self) -> crate::target::Target<P> { self.target }
         }
+
+        impl<P: crate::events::PosBound> crate::effect::MessageScope for $Name<P> {}
     };
 }
 
@@ -374,6 +386,15 @@ pub fn spawn_system<B: SpatialBackend>(
             attributes.register_source(spawned_entity, "root", root);
             if let Some(ability) = find_ability(effect_entity, &q_invoker, &q_ability) {
                 attributes.register_source(spawned_entity, "ability", ability);
+            }
+
+            // Inherit gather scope as base attributes (suffix stripped).
+            // Runs after template_fn so scope wins on collision.
+            if spawn_config.inherit_scope && !go_off.gather.is_empty() {
+                for (key, val) in &go_off.gather {
+                    let attr_name = key.split('@').next().unwrap_or(key);
+                    attributes.set_base(spawned_entity, attr_name, *val);
+                }
             }
 
             match (&target_targets, parent_entity) {

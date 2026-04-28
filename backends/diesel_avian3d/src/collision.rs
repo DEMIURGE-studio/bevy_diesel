@@ -98,6 +98,9 @@ impl HasDieselTarget<Vec3> for CollidedPosition {
     fn diesel_target(&self) -> DieselTarget<Vec3> { self.target }
 }
 
+impl bevy_diesel::effect::MessageScope for CollidedEntity {}
+impl bevy_diesel::effect::MessageScope for CollidedPosition {}
+
 // ---------------------------------------------------------------------------
 // CollisionFilter trait + Collides marker
 // ---------------------------------------------------------------------------

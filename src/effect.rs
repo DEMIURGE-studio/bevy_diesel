@@ -11,6 +11,18 @@ use crate::pipeline::generate_targets;
 use crate::target::{GatherScope, InvokerTarget, Target, TargetGenerator};
 
 // ---------------------------------------------------------------------------
+// MessageScope
+// ---------------------------------------------------------------------------
+
+/// Expose a message's payload to downstream effects. Keys use the
+/// `@go_off` suffix by convention. Default empty.
+pub trait MessageScope {
+    fn scope(&self) -> GatherScope {
+        GatherScope::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GoOffOrigin<P> — root trigger, consumed by propagate_system
 // ---------------------------------------------------------------------------
 

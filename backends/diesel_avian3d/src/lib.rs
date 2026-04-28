@@ -142,10 +142,10 @@ impl SpatialBackend for AvianBackend {
                         let offset = random_in_sphere(&mut ctx.rng, *radius);
                         let pos = origin + offset;
                         let scope = vec![
-                            ("gather_distance", offset.length()),
-                            ("gather_radius", *radius),
-                            ("gather_rank", i as f32),
-                            ("gather_count", total),
+                            ("distance@gather", offset.length()),
+                            ("radius@gather", *radius),
+                            ("rank@gather", i as f32),
+                            ("count@gather", total),
                         ];
                         (bevy_diesel::target::Target::position(pos), scope)
                     })
@@ -160,10 +160,10 @@ impl SpatialBackend for AvianBackend {
                         let offset = Vec3::new(v.x, 0.0, v.y);
                         let pos = origin + offset;
                         let scope = vec![
-                            ("gather_distance", offset.length()),
-                            ("gather_radius", *radius),
-                            ("gather_rank", i as f32),
-                            ("gather_count", total),
+                            ("distance@gather", offset.length()),
+                            ("radius@gather", *radius),
+                            ("rank@gather", i as f32),
+                            ("count@gather", total),
                         ];
                         (bevy_diesel::target::Target::position(pos), scope)
                     })
@@ -184,9 +184,9 @@ impl SpatialBackend for AvianBackend {
                         );
                         let pos = origin + offset;
                         let scope = vec![
-                            ("gather_distance", offset.length()),
-                            ("gather_rank", i as f32),
-                            ("gather_count", total),
+                            ("distance@gather", offset.length()),
+                            ("rank@gather", i as f32),
+                            ("count@gather", total),
                         ];
                         (bevy_diesel::target::Target::position(pos), scope)
                     })
@@ -205,10 +205,10 @@ impl SpatialBackend for AvianBackend {
                         let dist = rand_f32_range(&mut ctx.rng, 0.0, *length);
                         let pos = origin + dir * dist;
                         let scope = vec![
-                            ("gather_distance", dist),
-                            ("gather_length", *length),
-                            ("gather_rank", i as f32),
-                            ("gather_count", total),
+                            ("distance@gather", dist),
+                            ("length@gather", *length),
+                            ("rank@gather", i as f32),
+                            ("count@gather", total),
                         ];
                         (bevy_diesel::target::Target::position(pos), scope)
                     })
@@ -239,8 +239,8 @@ impl SpatialBackend for AvianBackend {
                 for (i, (_, scope)) in targets.iter_mut().enumerate() {
                     for (key, val) in scope.iter_mut() {
                         match *key {
-                            "gather_rank" => *val = i as f32,
-                            "gather_count" => *val = total,
+                            "rank@gather" => *val = i as f32,
+                            "count@gather" => *val = total,
                             _ => {}
                         }
                     }
@@ -498,10 +498,10 @@ fn find_entities_in_radius(
             Some((
                 bevy_diesel::target::Target::entity(hit.entity, position),
                 vec![
-                    ("gather_distance", distance),
-                    ("gather_radius", radius),
-                    ("gather_rank", 0.0),
-                    ("gather_count", 0.0),
+                    ("distance@gather", distance),
+                    ("radius@gather", radius),
+                    ("rank@gather", 0.0),
+                    ("count@gather", 0.0),
                 ],
             ))
         })
@@ -512,8 +512,8 @@ fn find_entities_in_radius(
     for (i, (_, scope)) in out.iter_mut().enumerate() {
         for (key, val) in scope.iter_mut() {
             match *key {
-                "gather_rank" => *val = i as f32,
-                "gather_count" => *val = total,
+                "rank@gather" => *val = i as f32,
+                "count@gather" => *val = total,
                 _ => {}
             }
         }
