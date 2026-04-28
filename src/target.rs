@@ -7,10 +7,10 @@ use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
 
-/// Scalar bag on `GoOff` / `GoOffOrigin`. Keys use a source suffix:
-/// `@gather` for gatherer metadata, `@go_off` for message payloads.
-/// Read by expression evaluation via gauge's `extras` channel.
-pub type GatherScope = Vec<(&'static str, f32)>;
+/// Per-instance scalar bag on `GoOff` / `GoOffOrigin`. Keys use the
+/// `@scope` namespace, e.g. `Distance@scope`, `Count@scope`. Read by
+/// expression evaluation via gauge's `extras` channel.
+pub type Scope = Vec<(&'static str, f32)>;
 // ---------------------------------------------------------------------------
 // InvokerTarget<P>
 // ---------------------------------------------------------------------------

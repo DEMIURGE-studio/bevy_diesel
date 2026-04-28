@@ -48,7 +48,7 @@ pub mod prelude {
     pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     pub use crate::target::{
-        GatherScope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType,
+        Scope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType,
     };
     pub use crate::effect::{GoOff, GoOffConfig, SubEffectOf, SubEffects};
     pub use crate::events::{StartInvoke, StopInvoke, OnRepeat};

@@ -388,10 +388,10 @@ pub fn spawn_system<B: SpatialBackend>(
                 attributes.register_source(spawned_entity, "ability", ability);
             }
 
-            // Inherit gather scope as base attributes (suffix stripped).
+            // Inherit scope as base attributes (suffix stripped).
             // Runs after template_fn so scope wins on collision.
-            if spawn_config.inherit_scope && !go_off.gather.is_empty() {
-                for (key, val) in &go_off.gather {
+            if spawn_config.inherit_scope && !go_off.scope.is_empty() {
+                for (key, val) in &go_off.scope {
                     let attr_name = key.split('@').next().unwrap_or(key);
                     attributes.set_base(spawned_entity, attr_name, *val);
                 }

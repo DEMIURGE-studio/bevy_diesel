@@ -8,7 +8,7 @@ use bevy_gearbox::RegistrationAppExt;
 use crate::events::{OnRepeat, StartInvoke, StopInvoke};
 use crate::gearbox::repeater;
 use crate::spawn::{OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget};
-use crate::target::{GatherScope, Target};
+use crate::target::{Scope, Target};
 
 /// Defines how diesel interacts with a game's spatial representation.
 ///
@@ -62,16 +62,16 @@ pub trait SpatialBackend: Send + Sync + 'static {
         origin: Self::Pos,
         gatherer: &Self::Gatherer,
         exclude: Entity,
-    ) -> Vec<(Target<Self::Pos>, GatherScope)>;
+    ) -> Vec<(Target<Self::Pos>, Scope)>;
 
     /// Filter gathered targets (count limits, line-of-sight, etc.).
     fn apply_filter(
         ctx: &mut Self::Context<'_, '_>,
-        targets: Vec<(Target<Self::Pos>, GatherScope)>,
+        targets: Vec<(Target<Self::Pos>, Scope)>,
         filter: &Self::Filter,
         invoker: Entity,
         origin: Self::Pos,
-    ) -> Vec<(Target<Self::Pos>, GatherScope)>;
+    ) -> Vec<(Target<Self::Pos>, Scope)>;
 
     /// Insert position component(s) onto a spawned entity.
     fn insert_position(

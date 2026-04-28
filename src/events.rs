@@ -120,7 +120,7 @@ where
 {
     for matched in reader.read() {
         if blocked.is_blocked(matched.edge) { continue; }
-        writer.write(GoOffOrigin::with_gather(
+        writer.write(GoOffOrigin::with_scope(
             matched.target,
             matched.message.diesel_target(),
             matched.message.scope(),

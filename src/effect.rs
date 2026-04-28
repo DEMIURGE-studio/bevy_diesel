@@ -8,17 +8,17 @@ use crate::backend::SpatialBackend;
 use crate::diagnostics::diesel_debug;
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::pipeline::generate_targets;
-use crate::target::{GatherScope, InvokerTarget, Target, TargetGenerator};
+use crate::target::{Scope, InvokerTarget, Target, TargetGenerator};
 
 // ---------------------------------------------------------------------------
 // MessageScope
 // ---------------------------------------------------------------------------
 
 /// Expose a message's payload to downstream effects. Keys use the
-/// `@go_off` suffix by convention. Default empty.
+/// `@scope` namespace by convention. Default empty.
 pub trait MessageScope {
-    fn scope(&self) -> GatherScope {
-        GatherScope::new()
+    fn scope(&self) -> Scope {
+        Scope::new()
     }
 }
 
@@ -33,7 +33,7 @@ pub trait MessageScope {
 pub struct GoOffOrigin<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
     pub target: Target<P>,
-    pub gather: GatherScope,
+    pub scope: Scope,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
@@ -41,15 +41,15 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
         Self {
             entity,
             target,
-            gather: GatherScope::new(),
+            scope: Scope::new(),
         }
     }
 
-    pub fn with_gather(entity: Entity, target: Target<P>, gather: GatherScope) -> Self {
+    pub fn with_scope(entity: Entity, target: Target<P>, scope: Scope) -> Self {
         Self {
             entity,
             target,
-            gather,
+            scope,
         }
     }
 }
@@ -66,7 +66,7 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
     pub target: Target<P>,
-    pub gather: GatherScope,
+    pub scope: Scope,
 }
 
 impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
@@ -74,15 +74,15 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
         Self {
             entity,
             target,
-            gather: GatherScope::new(),
+            scope: Scope::new(),
         }
     }
 
-    pub fn with_gather(entity: Entity, target: Target<P>, gather: GatherScope) -> Self {
+    pub fn with_scope(entity: Entity, target: Target<P>, scope: Scope) -> Self {
         Self {
             entity,
             target,
-            gather,
+            scope,
         }
     }
 }
@@ -255,9 +255,9 @@ pub fn go_off_on_entry<B: SpatialBackend>(
         );
 
         diesel_debug!("[diesel] go_off_on_entry: entity={:?} invoker={:?} targets_count={}", entity, invoker, targets.len());
-        for (target, gather) in targets {
+        for (target, scope) in targets {
             diesel_debug!("[diesel]   -> writing GoOffOrigin for {:?} target={:?}", entity, target);
-            writer.write(GoOffOrigin::with_gather(entity, target, gather));
+            writer.write(GoOffOrigin::with_scope(entity, target, scope));
         }
     }
 }
