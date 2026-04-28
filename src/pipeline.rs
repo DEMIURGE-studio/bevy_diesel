@@ -52,7 +52,7 @@ pub fn generate_targets<B: SpatialBackend>(
     };
 
     // Stage 3: Gather
-    match &generator.gatherer {
+    let mut results = match &generator.gatherer {
         None => {
             // Identity: return the resolved+offset target with no scope.
             vec![(offset_target, Scope::new())]
@@ -61,7 +61,14 @@ pub fn generate_targets<B: SpatialBackend>(
             // Fully delegated to backend; backend attaches per-target scope.
             B::gather(ctx, offset_target.position, gatherer, invoker)
         }
+    };
+
+    let invoker_pos = B::position_of(ctx, invoker).unwrap_or_default();
+    for (target, scope) in &mut results {
+        let dist = B::distance(&invoker_pos, &target.position);
+        scope.push(("InvokerDistance@scope", dist));
     }
+    results
 }
 
 /// Reads [`GoOffOrigin`] messages, walks the [`SubEffects`] tree for each one,

@@ -299,7 +299,8 @@ pub fn spawn_system<B: SpatialBackend>(
         diesel_debug!("[diesel] spawn_system: received GoOff for {:?}, template='{}', invoker={:?}",
             effect_entity, spawn_config.template_id, invoker);
 
-        let spawn_targets: Vec<Target<B::Pos>> = generate_targets::<B>(
+        // Keep per-spawn scope; used for `inherit_scope` injection below.
+        let spawn_targets: Vec<(Target<B::Pos>, crate::target::Scope)> = generate_targets::<B>(
             &spawn_config.spawn_position_generator,
             &mut ctx,
             invoker,
@@ -307,21 +308,20 @@ pub fn spawn_system<B: SpatialBackend>(
             root,
             B::Pos::default(),
             passed,
-        )
-        .into_iter()
-        .map(|(t, _)| t)
-        .collect();
+        );
 
         if spawn_targets.is_empty() {
             diesel_debug!("[diesel]   spawn_targets EMPTY — skipping! invoker={:?} invoker_target={:?}", invoker, invoker_target);
             continue;
         }
-        diesel_debug!("[diesel]   spawn_targets count: {}, positions: {:?}", spawn_targets.len(), spawn_targets.iter().map(|t| t.position).collect::<Vec<_>>());
+        diesel_debug!("[diesel]   spawn_targets count: {}, positions: {:?}", spawn_targets.len(), spawn_targets.iter().map(|(t, _)| t.position).collect::<Vec<_>>());
 
         let target_targets = if let Some(target_generator) = &spawn_config.spawn_target_generator {
+            let spawn_positions: Vec<Target<B::Pos>> =
+                spawn_targets.iter().map(|(t, _)| *t).collect();
             let targets = generate_targets_with_spawn_positions::<B>(
                 target_generator,
-                &spawn_targets,
+                &spawn_positions,
                 &[passed],
                 invoker,
                 invoker_target,
@@ -359,7 +359,7 @@ pub fn spawn_system<B: SpatialBackend>(
             None
         };
 
-        for (i, spawn_target) in spawn_targets.iter().enumerate() {
+        for (i, (spawn_target, spawn_scope)) in spawn_targets.iter().enumerate() {
             let spawned_entity = commands.spawn(InvokedBy(invoker)).id();
             B::insert_position(
                 &mut commands.entity(spawned_entity),
@@ -390,8 +390,8 @@ pub fn spawn_system<B: SpatialBackend>(
 
             // Inherit scope as base attributes (suffix stripped).
             // Runs after template_fn so scope wins on collision.
-            if spawn_config.inherit_scope && !go_off.scope.is_empty() {
-                for (key, val) in &go_off.scope {
+            if spawn_config.inherit_scope {
+                for (key, val) in go_off.scope.iter().chain(spawn_scope.iter()) {
                     let attr_name = key.split('@').next().unwrap_or(key);
                     attributes.set_base(spawned_entity, attr_name, *val);
                 }

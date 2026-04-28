@@ -142,7 +142,7 @@ impl SpatialBackend for AvianBackend {
                         let offset = random_in_sphere(&mut ctx.rng, *radius);
                         let pos = origin + offset;
                         let scope = vec![
-                            ("Distance@scope", offset.length()),
+                            ("OriginDistance@scope", offset.length()),
                             ("Radius@scope", *radius),
                             ("Rank@scope", i as f32),
                             ("GatherCount@scope", total),
@@ -160,7 +160,7 @@ impl SpatialBackend for AvianBackend {
                         let offset = Vec3::new(v.x, 0.0, v.y);
                         let pos = origin + offset;
                         let scope = vec![
-                            ("Distance@scope", offset.length()),
+                            ("OriginDistance@scope", offset.length()),
                             ("Radius@scope", *radius),
                             ("Rank@scope", i as f32),
                             ("GatherCount@scope", total),
@@ -184,7 +184,7 @@ impl SpatialBackend for AvianBackend {
                         );
                         let pos = origin + offset;
                         let scope = vec![
-                            ("Distance@scope", offset.length()),
+                            ("OriginDistance@scope", offset.length()),
                             ("Rank@scope", i as f32),
                             ("GatherCount@scope", total),
                         ];
@@ -205,7 +205,7 @@ impl SpatialBackend for AvianBackend {
                         let dist = rand_f32_range(&mut ctx.rng, 0.0, *length);
                         let pos = origin + dir * dist;
                         let scope = vec![
-                            ("Distance@scope", dist),
+                            ("OriginDistance@scope", dist),
                             ("Length@scope", *length),
                             ("Rank@scope", i as f32),
                             ("GatherCount@scope", total),
@@ -237,14 +237,9 @@ impl SpatialBackend for AvianBackend {
                 // Rewrite rank now that order is stable.
                 let total = targets.len() as f32;
                 for (i, (_, scope)) in targets.iter_mut().enumerate() {
-                    for (key, val) in scope.iter_mut() {
-                        match *key {
-                            "Rank@scope" => *val = i as f32,
-                            "GatherCount@scope" => *val = total,
-                            _ => {}
-                        }
-
-                    }
+                    scope.retain(|(k, _)| *k != "Rank@scope" && *k != "GatherCount@scope");
+                    scope.push(("Rank@scope", i as f32));
+                    scope.push(("GatherCount@scope", total));
                 }
                 targets
             }
@@ -499,25 +494,17 @@ fn find_entities_in_radius(
             Some((
                 bevy_diesel::target::Target::entity(hit.entity, position),
                 vec![
-                    ("Distance@scope", distance),
+                    ("OriginDistance@scope", distance),
                     ("Radius@scope", radius),
-                    ("Rank@scope", 0.0),
-                    ("GatherCount@scope", 0.0),
                 ],
             ))
         })
         .collect();
 
-    // Fill rank + count now that the final set is known.
     let total = out.len() as f32;
     for (i, (_, scope)) in out.iter_mut().enumerate() {
-        for (key, val) in scope.iter_mut() {
-            match *key {
-                "Rank@scope" => *val = i as f32,
-                "GatherCount@scope" => *val = total,
-                _ => {}
-            }
-        }
+        scope.push(("Rank@scope", i as f32));
+        scope.push(("GatherCount@scope", total));
     }
     out
 }
