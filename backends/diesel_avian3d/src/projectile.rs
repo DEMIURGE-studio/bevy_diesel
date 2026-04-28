@@ -37,17 +37,25 @@ impl ProjectileEffect {
 #[require(Sensor, CollisionEventsEnabled, RigidBody::Kinematic, Collider::sphere(0.2))]
 pub struct LinearProjectileEffect {
     pub speed: f32,
+    /// Flatten the Y component of the direction so the projectile
+    /// travels purely on the XZ plane regardless of spawn/target height.
+    pub horizontal: bool,
 }
 
 impl Default for LinearProjectileEffect {
     fn default() -> Self {
-        Self { speed: 20.0 }
+        Self { speed: 20.0, horizontal: false }
     }
 }
 
 impl LinearProjectileEffect {
     pub fn new(speed: f32) -> Self {
-        Self { speed }
+        Self { speed, horizontal: false }
+    }
+
+    pub fn horizontal(mut self) -> Self {
+        self.horizontal = true;
+        self
     }
 }
 
@@ -114,7 +122,11 @@ fn init_linear_target(
         return;
     };
 
-    let direction = (target.position - transform.translation).normalize_or_zero();
+    let mut delta = target.position - transform.translation;
+    if effect.horizontal {
+        delta.y = 0.0;
+    }
+    let direction = delta.normalize_or_zero();
     let direction = if direction == Vec3::ZERO {
         Vec3::NEG_Y
     } else {
