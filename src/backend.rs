@@ -115,7 +115,7 @@ pub struct DieselCorePlugin<B: SpatialBackend> {
 impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
     fn build(&self, app: &mut App) {
         // State machine core
-        app.add_plugins(bevy_gearbox::GearboxPlugin);
+        app.add_plugins(bevy_gearbox::GearboxPlugin::default());
 
         // Diesel effect pipeline ordering
         app.configure_sets(bevy_gearbox::GearboxSchedule, (
