@@ -13,8 +13,8 @@ categories = ["game-development", "game-engines"]
 bevy_diesel = { path = "../.." }
 # How can I get rid of this?
 bevy_gauge = { path = "../../../bevy_gauge" }
-bevy = "0.18.0"
-avian3d = "0.6"
+bevy = "0.19.0"
+avian3d = "0.7"
 rand = "0.9"
 
 [features]

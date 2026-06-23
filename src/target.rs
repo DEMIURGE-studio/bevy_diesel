@@ -92,7 +92,7 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> From<InvokerTarg
 // ---------------------------------------------------------------------------
 
 /// Determines which entity/position is used as the base for the pipeline.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum TargetType<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     /// The entity that invoked the ability.
     Invoker,
@@ -103,15 +103,10 @@ pub enum TargetType<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     /// The spawn position (passed as context).
     Spawn,
     /// The incoming target from the parent effect's GoOff event.
+    #[default]
     Passed,
     /// A fixed position.
     Position(P),
-}
-
-impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Default for TargetType<P> {
-    fn default() -> Self {
-        Self::Passed
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +230,17 @@ pub struct TargetMutator<B: SpatialBackend> {
     _phantom: PhantomData<B>,
 }
 
+// Manual so it doesn't require `B: Default` (backend marker). Enables bsn use
+// without a `template(...)` wrapper.
+impl<B: SpatialBackend> Default for TargetMutator<B> {
+    fn default() -> Self {
+        Self {
+            generator: TargetGenerator::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<B: SpatialBackend> TargetMutator<B> {
     fn new(target_type: TargetType<B::Pos>) -> Self {
         Self {
@@ -276,6 +282,13 @@ impl<B: SpatialBackend> TargetMutator<B> {
     /// Target a fixed position.
     pub fn at_position(position: B::Pos) -> Self {
         Self::new(TargetType::Position(position))
+    }
+
+    /// Target the root entity and gather targets around it (e.g. an AoE in
+    /// radius). Single-call so it reads as a bare bsn component:
+    /// `TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(3.0))`.
+    pub fn root_gathering(gatherer: B::Gatherer) -> Self {
+        Self::root().with_gatherer(gatherer)
     }
 
     // -- Builder methods --

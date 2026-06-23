@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_gearbox::{AcceptAll, Active, GearboxMessage};
 
 /// Ability marker. Requires `InvokeStatus`.
-#[derive(Component, Default, Reflect)]
+#[derive(Component, Default, Clone, Reflect)]
 #[require(InvokeStatus)]
 pub struct Ability;
 

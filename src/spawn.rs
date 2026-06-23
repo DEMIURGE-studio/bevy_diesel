@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
+use bevy::scene::prelude::{CommandsSceneExt, EntityCommandsSceneExt, Scene};
 
 use bevy_gauge::prelude::{AttributeDerived, AttributesMut};
 use bevy_gauge::resolvable::AttributeResolvable;
@@ -38,25 +39,49 @@ fn find_ability(
 // TemplateRegistry
 // ---------------------------------------------------------------------------
 
-/// Maps string IDs to template spawning functions.
+/// A factory that produces a fresh [`Scene`] each time it's called. Stored in the
+/// [`TemplateRegistry`]; a scene is consumed on resolve, so we keep a factory
+/// rather than a single scene instance.
+pub type SceneFactory = Box<dyn Fn() -> Box<dyn Scene> + Send + Sync>;
+
+/// Maps string IDs to BSN [`Scene`] factories.
+///
+/// Callers choose how to instantiate: [`TemplateRegistry::spawn`] for a fresh
+/// entity (e.g. equipping an ability) or [`TemplateRegistry::apply`] to patch an
+/// already-spawned entity (the diesel runtime spawn path, which pre-positions
+/// the entity first).
 #[derive(Resource, Default)]
 pub struct TemplateRegistry {
-    templates: HashMap<String, Box<dyn Fn(&mut Commands, Option<Entity>) -> Entity + Send + Sync>>,
+    templates: HashMap<String, SceneFactory>,
 }
 
 impl TemplateRegistry {
-    pub fn register<F>(&mut self, id: impl Into<String>, template: F)
+    /// Register a scene factory under `id`. The factory must produce a fresh
+    /// scene on each call.
+    pub fn register<F>(&mut self, id: impl Into<String>, factory: F)
     where
-        F: Fn(&mut Commands, Option<Entity>) -> Entity + Send + Sync + 'static,
+        F: Fn() -> Box<dyn Scene> + Send + Sync + 'static,
     {
-        self.templates.insert(id.into(), Box::new(template));
+        self.templates.insert(id.into(), Box::new(factory));
     }
 
-    pub fn get(
-        &self,
-        id: &str,
-    ) -> Option<&(dyn Fn(&mut Commands, Option<Entity>) -> Entity + Send + Sync)> {
-        self.templates.get(id).map(|f| f.as_ref())
+    /// Spawn the template as a fresh entity and return its id, or `None` if the
+    /// id is not registered.
+    pub fn spawn(&self, id: &str, commands: &mut Commands) -> Option<Entity> {
+        let factory = self.templates.get(id)?;
+        Some(commands.spawn_scene(factory()).id())
+    }
+
+    /// Apply the template onto an existing entity. Returns `false` if the id is
+    /// not registered.
+    pub fn apply(&self, id: &str, commands: &mut Commands, entity: Entity) -> bool {
+        match self.templates.get(id) {
+            Some(factory) => {
+                commands.entity(entity).apply_scene(factory());
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn keys(&self) -> Vec<&str> {
@@ -80,6 +105,22 @@ pub struct SpawnConfig<B: SpatialBackend> {
     pub inherit_scope: bool,
     #[allow(dead_code)]
     _phantom: PhantomData<B>,
+}
+
+// Manual (not derived) so it doesn't require `B: Default` — `B` is a backend
+// marker. `Default` makes `SpawnConfig` usable as a bare bsn component / via its
+// constructors (`SpawnConfig::passed(...)`) without a `template(...)` wrapper.
+impl<B: SpatialBackend> Default for SpawnConfig<B> {
+    fn default() -> Self {
+        Self {
+            template_id: String::new(),
+            spawn_position_generator: TargetGenerator::default(),
+            spawn_target_generator: None,
+            as_child_of: None,
+            inherit_scope: false,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<B: SpatialBackend> SpawnConfig<B> {
@@ -367,7 +408,8 @@ pub fn spawn_system<B: SpatialBackend>(
                 spawn_target.position,
                 parent_entity,
             );
-            let Some(template_fn) = template_registry.get(&spawn_config.template_id) else {
+            diesel_debug!("[diesel] spawning entity {:?} from template '{}'", spawned_entity, spawn_config.template_id);
+            if !template_registry.apply(&spawn_config.template_id, &mut commands, spawned_entity) {
                 panic!(
                     "[bevy_diesel] Template '{}' not found in TemplateRegistry. \
                      Registered: {:?}. Ensure the template is registered before \
@@ -375,9 +417,7 @@ pub fn spawn_system<B: SpatialBackend>(
                     spawn_config.template_id,
                     template_registry.keys(),
                 );
-            };
-            diesel_debug!("[diesel] spawning entity {:?} from template '{}'", spawned_entity, spawn_config.template_id);
-            template_fn(&mut commands, Some(spawned_entity));
+            }
 
             // Register gauge sources for cross-entity attribute expressions.
             // The aliases are stored in the DependencyGraph immediately; when

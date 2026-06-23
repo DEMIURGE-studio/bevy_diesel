@@ -105,6 +105,7 @@ pub struct AvianContext<'w, 's> {
 // AvianBackend - SpatialBackend implementation
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Copy, Default)]
 pub struct AvianBackend;
 
 impl SpatialBackend for AvianBackend {

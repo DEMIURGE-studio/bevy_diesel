@@ -190,7 +190,7 @@ impl<B: SpatialBackend> GoOffConfig<B> {
 }
 
 /// Points a child effect to its parent.
-#[derive(Component, Clone, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, PartialEq, Eq, Debug, FromTemplate)]
 #[relationship(relationship_target = SubEffects)]
 pub struct SubEffectOf(#[entities] pub Entity);
 

@@ -13,7 +13,7 @@ use bevy_diesel::invoker::InvokedBy;
 ///
 /// For angular flinch, set `angular` to a non-zero value — a random-direction
 /// angular impulse is applied to make targets wobble on hit.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Default)]
 pub struct ImpulseEffect {
     /// Linear impulse magnitude (direction: away from effect source).
     pub force: f32,
@@ -24,6 +24,16 @@ pub struct ImpulseEffect {
 }
 
 impl ImpulseEffect {
+    /// Full builder: linear `force`, `vertical` lift, and `angular` flinch.
+    /// Reads cleanly as a bare bsn component: `ImpulseEffect::new(8.0, 3.0, 5.0)`.
+    pub fn new(force: f32, vertical: f32, angular: f32) -> Self {
+        Self {
+            force,
+            vertical,
+            angular,
+        }
+    }
+
     pub fn knockback(force: f32) -> Self {
         Self {
             force,

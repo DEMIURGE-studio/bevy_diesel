@@ -27,7 +27,7 @@ impl Invokes {
 }
 
 /// Relationship component on an ability/effect pointing to its invoker (e.g. a character entity).
-#[derive(Component, Clone, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, PartialEq, Eq, Debug, FromTemplate)]
 #[relationship(relationship_target = Invokes)]
 pub struct InvokedBy(#[entities] pub Entity);
 
