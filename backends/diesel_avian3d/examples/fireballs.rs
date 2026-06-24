@@ -1,6 +1,14 @@
-//! Fireball & Firestorm example
+//! Fireball & Firestorm example — **BSN scenes** edition.
 //!
-//! Templates: explosion, explosive_projectile (shared), fireball, firestorm_zone, firestorm
+//! Demonstrates diesel's declarative authoring: every "template" is a
+//! `fn() -> impl Scene` registered as a scene factory, composed from the core
+//! scene helpers (`invoked` / `single_shot` / `repeater`) plus bare diesel
+//! components. Visuals are part of the scene (cloned from a cached
+//! `VisualAssets` resource in a `template(|ctx| …)` closure) — there is no
+//! post-spawn marker/attach system.
+//!
+//! Scenes: explosion, explosive_projectile (shared), fireball, firestorm_zone,
+//! firestorm.
 //!
 //! Left click: fireball at cursor | Right click: firestorm at cursor
 
@@ -9,6 +17,13 @@ use std::time::Duration;
 use avian3d::prelude::*;
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, Scene};
+use diesel_avian3d::bevy_diesel::bevy_gauge::{attributes, instant};
+// Gearbox state-transition types (the diesel prelude doesn't re-export these).
+// `Target` here is the gearbox transition target; the diesel position-target is
+// aliased to `DieselTarget` to avoid the name clash with the prelude glob.
+use diesel_avian3d::bevy_diesel::bevy_gearbox::{Substates, Target, Transitions};
+use diesel_avian3d::bevy_diesel::target::Target as DieselTarget;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
@@ -17,12 +32,13 @@ use diesel_avian3d::DirectionOffset;
 // ---------------------------------------------------------------------------
 
 /// Team marker. Same team = allies.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 struct Team(u32);
 
 /// Filter on projectiles. Determines which teams they can hit.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, Default, bevy::ecs::template::FromTemplate)]
 enum TeamFilter {
+    #[default]
     Enemies,
 }
 
@@ -52,26 +68,10 @@ enum Layer {
 }
 
 // ---------------------------------------------------------------------------
-// Marker components - we won't need these with bsn!
-// ---------------------------------------------------------------------------
-
-#[derive(Component)]
-struct Player;
-
-#[derive(Component)]
-struct ExplosionMarker;
-
-#[derive(Component)]
-struct ProjectileMarker;
-
-#[derive(Component)]
-struct FirestormZoneMarker;
-
-// ---------------------------------------------------------------------------
 // ScaleFadeVfx - scales entity down to zero over duration, then despawns
 // ---------------------------------------------------------------------------
 
-#[derive(Component)]
+#[derive(Component, Clone, Default)]
 struct ScaleFadeVfx {
     duration: f32,
     elapsed: f32,
@@ -113,245 +113,170 @@ fn scale_fade_system(
 }
 
 // ===========================================================================
-// TEMPLATES
+// SCENES (registered as scene factories)
 // ===========================================================================
 
 fn register_templates(mut registry: ResMut<TemplateRegistry>) {
-    registry.register("explosion", explosion_template);
-    registry.register("explosive_projectile", explosive_projectile_template);
-    registry.register("fireball", fireball_ability_template);
-    registry.register("firestorm_zone", firestorm_zone_template);
-    registry.register("firestorm", firestorm_ability_template);
+    registry.register("explosion", || Box::new(explosion()));
+    registry.register("explosive_projectile", || Box::new(explosive_projectile()));
+    registry.register("fireball", || Box::new(fireball()));
+    registry.register("firestorm_zone", || Box::new(firestorm_zone()));
+    registry.register("firestorm", || Box::new(firestorm()));
+}
+
+/// Mass + inertia for a collider shape, as one mergeable scene (a
+/// `MassPropertiesBundle` can't go through a single `template(...)`).
+fn mass_properties(shape: Collider, density: f32) -> impl Scene {
+    let mp = MassPropertiesBundle::from_shape(&shape, density);
+    let (mass, angular_inertia, center_of_mass) = (mp.mass, mp.angular_inertia, mp.center_of_mass);
+    bsn! {
+        template(move |_| Ok(mass.clone()))
+        template(move |_| Ok(angular_inertia.clone()))
+        template(move |_| Ok(center_of_mass.clone()))
+    }
 }
 
 // ---------------------------------------------------------------------------
-// explosion - expanding sphere, despawns after a short time
+// explosion - expanding sphere VFX, scale-fades then despawns
 // ---------------------------------------------------------------------------
 
-fn explosion_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
-
-    commands.entity(entity).insert((
-        Name::new("Explosion"),
-        ExplosionMarker,
-        Visibility::Inherited,
-        ScaleFadeVfx::new(0.4),
-    ));
-
-    entity
+fn explosion() -> impl Scene {
+    bsn! {
+        Name::new("Explosion")
+        Visibility::Inherited
+        ScaleFadeVfx::new(0.4)
+        template(|ctx| Ok(Mesh3d(ctx.resource::<VisualAssets>().explosion_mesh.clone())))
+        template(|ctx| Ok(MeshMaterial3d(ctx.resource::<VisualAssets>().explosion_material.clone())))
+    }
 }
 
 // ---------------------------------------------------------------------------
-// explosive_projectile - projectile that spawns "explosion" on collision
+// explosive_projectile - Flying → Hit → Done; on collision spawns an explosion
+// and decrements ProjectileLife. With ProjectileLife == 1, one hit ends it.
 // ---------------------------------------------------------------------------
 
-fn explosive_projectile_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
+fn explosive_projectile() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("ExplosiveProjectile")
+            ProjectileEffect::new(20.0)
+            TeamFilter::Enemies
+            CollisionLayers::new([Layer::Projectile], [Layer::Terrain, Layer::Character])
+            Visibility::Inherited
+            template(|_| Ok(attributes! { "ProjectileLife" => 1.0 }))
+            { mass_properties(Collider::sphere(0.5), 2.0) }
+            template(|ctx| Ok(Mesh3d(ctx.resource::<VisualAssets>().projectile_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<VisualAssets>().projectile_material.clone())))
+            StateMachine InitialState(#Flying)
+        Substates [
+            #Flying Transitions [
+                (Target(#Hit) MessageEdge::<CollidedEntity>::default())
+            ],
 
-    commands.entity(entity).with_children(|parent| {
-        let flying = parent
-            .spawn_diesel_substate(entity, Name::new("Flying"))
-            .id();
+            #Hit Substates [
+                // Spawn the explosion at the projectile's position.
+                (SubEffectOf(#Hit) InvokedBy(#Root)
+                    Name::new("SpawnExplosion")
+                    SpawnConfig::passed("explosion")),
+                // Decrement projectile life (targets the projectile root).
+                #LifeTargeting SubEffectOf(#Hit) InvokedBy(#Root)
+                    TargetMutator::root()
+                Substates [
+                    (SubEffectOf(#LifeTargeting) InvokedBy(#Root)
+                        Name::new("DecrementLifeInstant")
+                        template(|_| Ok(instant! { "ProjectileLife" -= 1.0 })))
+                ],
+            ]
+            Transitions [
+                (Target(#Done) AlwaysEdge)
+            ],
 
-        parent.spawn_subeffect(
-            flying,
-            (
-                Name::new("SpawnExplosion"),
-                SpawnConfig::passed("explosion"),
-            ),
-        );
+            #Done template(|_| Ok(StateComponent(DelayedDespawn::now()))),
+        ]
+    }
+}
 
-        let life_targeting = parent
-            .spawn_subeffect(
-                flying,
-                (Name::new("DecrementLife"), TargetMutator::root()),
+// ---------------------------------------------------------------------------
+// fireball (ability) - single-shot: spawn one explosive_projectile at invoker,
+// aimed at the invoker's target.
+// ---------------------------------------------------------------------------
+
+fn fireball() -> impl Scene {
+    invoked::<Vec3, _, _>("Fireball Ability", Duration::from_millis(800), |root| {
+        single_shot::<AvianBackend>(root, bsn! {
+            SpawnConfig::invoker_offset_target(
+                "explosive_projectile",
+                Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 1.5)),
+                TargetGenerator::at_invoker_target(),
             )
-            .id();
-
-        parent.spawn_subeffect(
-            life_targeting,
-            (
-                Name::new("DecrementLifeInstant"),
-                bevy_diesel::bevy_gauge::instant! { "ProjectileLife" -= 1.0 },
-            ),
-        );
-
-        let done = parent
-            .spawn_diesel_substate(
-                entity,
-                (Name::new("Done"), StateComponent(DelayedDespawn::now())),
-            )
-            .id();
-
-        parent.spawn_transition::<CollidedEntity>(flying, flying);
-
-        parent.build_transition_always(entity, done, |t| {
-            t.init_guard(bevy_diesel::bevy_gauge::requires! { "ProjectileLife <= 0" })
-                .insert(RequiresStatsOf(entity));
-        });
-
-        let commands = parent.commands_mut();
-        commands
-            .entity(entity)
-            .insert((
-                Name::new("ExplosiveProjectile"),
-                ProjectileMarker,
-                ProjectileEffect::new(20.0),
-                TeamFilter::Enemies,
-                CollisionLayers::new([Layer::Projectile], [Layer::Terrain, Layer::Character]),
-                Visibility::Inherited,
-                bevy_diesel::bevy_gauge::attributes! {
-                    "ProjectileLife" => 1.0,
-                },
-                MassPropertiesBundle::from_shape(&Collider::sphere(0.5), 2.0),
-            ))
-            .init_state_machine(flying);
-    });
-
-    entity
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------
-// fireball (ability) - spawns explosive_projectile at invoker → target
+// firestorm_zone - a spawned zone whose repeater drops 3 volleys of
+// explosive_projectiles in a circle, then despawns.
 // ---------------------------------------------------------------------------
 
-fn fireball_ability_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
+/// The firestorm volley: 3 waves of 30 explosive_projectiles in a circle around
+/// the zone root, 500ms apart. Wraps the generic `repeater` at `Vec3` so it can
+/// be called bare in `bsn!` (no turbofish in scene-function position).
+fn firestorm_volley(root: bevy::ecs::template::EntityTemplate) -> impl Scene {
+    repeater::<Vec3>(
+        root,
+        "3",
+        0.5,
+        bsn! {
+            template(|_| Ok(SpawnConfig::root("explosive_projectile").with_gatherer(
+                AvianGatherer::Circle { radius: 4.0, count: NumberType::Fixed(30) },
+            )))
+        },
+    )
+}
 
-    commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
-        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
-
-        parent.spawn_subeffect(
-            invoke,
-            (
-                Name::new("SpawnProjectile"),
-                SpawnConfig::invoker("explosive_projectile")
-                    .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 1.5)))
-                    .with_target_generator(TargetGenerator::at_invoker_target()),
-            ),
-        );
-
-        parent.spawn_transition::<StartInvoke>(ready, invoke);
-        parent.spawn_transition_always(invoke, ready);
-
-        let commands = parent.commands_mut();
-        commands
-            .entity(entity)
-            .insert((Name::new("Fireball Ability"), Ability))
-            .init_state_machine(ready);
-    });
-
-    entity
+fn firestorm_zone() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("Firestorm Zone")
+            Visibility::Inherited
+            template(|ctx| Ok(Mesh3d(ctx.resource::<VisualAssets>().zone_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<VisualAssets>().zone_material.clone())))
+            StateMachine InitialState(#RepeaterSlot)
+            Transitions [
+                (Target(#Done) MessageEdge::<Done>::default())
+            ]
+        Substates [
+            // The repeater sub-chart merges onto this slot (its root carries
+            // InitialState/Repeater/Substates). On exhaustion it emits `Done` to
+            // its parent (#Root), which transitions to #Done above.
+            #RepeaterSlot firestorm_volley(#Root),
+            #Done template(|_| Ok(StateComponent(DelayedDespawn::now()))),
+        ]
+    }
 }
 
 // ---------------------------------------------------------------------------
-// firestorm_zone - repeater that drops explosive_projectiles in a circle
+// firestorm (ability) - single-shot: spawn a firestorm_zone above the target.
 // ---------------------------------------------------------------------------
 
-fn firestorm_zone_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
-
-    commands.entity(entity).with_children(|parent| {
-        // Repeater: 3 volleys, 500ms between each
-        let repeater = parent
-            .spawn_diesel_substate(entity, (Name::new("Repeater"), Repeater::new(3)))
-            .id();
-
-        let idle = parent
-            .spawn_diesel_substate(repeater, Name::new("Idle"))
-            .id();
-
-        let spawn_wave = parent
-            .spawn_diesel_substate(
-                repeater,
-                (
-                    Name::new("SpawnWave"),
-                    SpawnConfig::root("explosive_projectile").with_gatherer(
-                        AvianGatherer::Circle {
-                            radius: 4.0,
-                            count: NumberType::Fixed(30),
-                        },
-                    ),
-                ),
-            )
-            .id();
-
-        // Idle → SpawnWave (driven by OnRepeat from the repeater system)
-        parent.spawn_transition::<OnRepeat>(idle, spawn_wave);
-        // SpawnWave → Repeater (self-transition, triggers Changed<Active> for next cycle)
-        parent
-            .spawn_transition_always(spawn_wave, repeater)
-            .with_delay(Duration::from_millis(500));
-
-        // When repeater exhausts, OnComplete transitions to Done
-        let done = parent
-            .spawn_diesel_substate(
-                entity,
-                (Name::new("Done"), StateComponent(DelayedDespawn::now())),
-            )
-            .id();
-
-        parent.spawn_transition::<OnComplete>(repeater, done);
-
-        let commands = parent.commands_mut();
-        commands
-            .entity(repeater)
-            .insert(InitialState(idle));
-        commands
-            .entity(entity)
-            .insert((
-                Name::new("Firestorm Zone"),
-                FirestormZoneMarker,
-                Visibility::Inherited,
-            ))
-            .init_state_machine(repeater);
-    });
-
-    entity
-}
-
-// ---------------------------------------------------------------------------
-// firestorm (ability) - spawns firestorm_zone above target
-// ---------------------------------------------------------------------------
-
-fn firestorm_ability_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
-
-    commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_diesel_substate(entity, Name::new("Ready")).id();
-        let invoke = parent.spawn_diesel_substate(entity, Name::new("Invoke")).id();
-
-        parent.spawn_subeffect(
-            invoke,
-            (
-                Name::new("SpawnZone"),
-                SpawnConfig::passed("firestorm_zone")
-                    .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 8.0))),
-            ),
-        );
-
-        parent.spawn_transition::<StartInvoke>(ready, invoke);
-        parent.spawn_transition_always(invoke, ready);
-
-        let commands = parent.commands_mut();
-        commands
-            .entity(entity)
-            .insert((Name::new("Firestorm Ability"), Ability))
-            .init_state_machine(ready);
-    });
-
-    entity
+fn firestorm() -> impl Scene {
+    invoked::<Vec3, _, _>("Firestorm Ability", Duration::from_millis(1200), |root| {
+        single_shot::<AvianBackend>(root, bsn! {
+            template(|_| Ok(SpawnConfig::passed("firestorm_zone")
+                .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 8.0)))))
+        })
+    })
 }
 
 // ===========================================================================
-// SCENE
+// SCENE SETUP
 // ===========================================================================
 
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    registry: Res<TemplateRegistry>,
 ) {
     // Ground plane
     commands.spawn((
@@ -383,39 +308,35 @@ fn setup(
         ))
         .id();
 
-    // Spawn abilities as children of the player
-    let mut registry_cmds = commands;
+    // Spawn abilities as scenes, parented (via InvokedBy) to the player.
+    let fireball = registry.spawn("fireball", &mut commands).expect("fireball registered");
+    commands.entity(fireball).insert(InvokedBy(player));
 
-    let fireball = fireball_ability_template(&mut registry_cmds, None);
-    registry_cmds.entity(fireball).insert(InvokedBy(player));
+    let firestorm = registry.spawn("firestorm", &mut commands).expect("firestorm registered");
+    commands.entity(firestorm).insert(InvokedBy(player));
 
-    let firestorm = firestorm_ability_template(&mut registry_cmds, None);
-    registry_cmds.entity(firestorm).insert(InvokedBy(player));
-
-    // Store ability entity references on the player
-    registry_cmds.entity(player).insert(PlayerAbilities {
-        fireball,
-        firestorm,
-    });
+    commands.entity(player).insert(PlayerAbilities { fireball, firestorm });
 
     // Camera - isometric-ish
-    registry_cmds.spawn((
+    commands.spawn((
         Name::new("Camera"),
         Camera3d::default(),
         Transform::from_xyz(15.0, 20.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Light
-    registry_cmds.spawn((
+    commands.spawn((
         Name::new("Light"),
         DirectionalLight {
-            shadows_enabled: true,
             illuminance: 10000.0,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.8, 0.3, 0.0)),
     ));
 }
+
+#[derive(Component)]
+struct Player;
 
 #[derive(Component)]
 struct PlayerAbilities {
@@ -470,7 +391,7 @@ fn invoke_abilities(
         return;
     };
 
-    let target = Target::position(invoker_target.position);
+    let target = DieselTarget::position(invoker_target.position);
 
     if mouse.just_pressed(MouseButton::Left) {
         writer.write(StartInvoke::new(abilities.fireball, target));
@@ -484,7 +405,7 @@ fn invoke_abilities(
 }
 
 // ===========================================================================
-// VISUALS - attach meshes to spawned template entities
+// VISUALS - cached handles read by the scene closures above
 // ===========================================================================
 
 #[derive(Resource)]
@@ -526,33 +447,6 @@ fn setup_assets(
     });
 }
 
-fn attach_visuals(
-    mut commands: Commands,
-    q_projectiles: Query<(Entity, &Transform), Added<ProjectileMarker>>,
-    q_explosions: Query<Entity, Added<ExplosionMarker>>,
-    q_zones: Query<Entity, Added<FirestormZoneMarker>>,
-    assets: Res<VisualAssets>,
-) {
-    for (entity, transform) in q_projectiles.iter() {
-        commands.entity(entity).insert((
-            Mesh3d(assets.projectile_mesh.clone()),
-            MeshMaterial3d(assets.projectile_material.clone()),
-        ));
-    }
-    for entity in q_explosions.iter() {
-        commands.entity(entity).insert((
-            Mesh3d(assets.explosion_mesh.clone()),
-            MeshMaterial3d(assets.explosion_material.clone()),
-        ));
-    }
-    for entity in q_zones.iter() {
-        commands.entity(entity).insert((
-            Mesh3d(assets.zone_mesh.clone()),
-            MeshMaterial3d(assets.zone_material.clone()),
-        ));
-    }
-}
-
 // ===========================================================================
 // APP
 // ===========================================================================
@@ -566,15 +460,11 @@ fn main() {
             AvianBackend::plugin(),
             CollisionFilterPlugin::<TeamFilter>::default(),
         ))
-        .add_systems(Startup, (setup, setup_assets, register_templates))
+        // setup_assets + register_templates before setup (which spawns scenes).
+        .add_systems(Startup, (setup_assets, register_templates, setup).chain())
         .add_systems(
             Update,
-            (
-                update_cursor_target,
-                invoke_abilities,
-                attach_visuals,
-                scale_fade_system,
-            ),
+            (update_cursor_target, invoke_abilities, scale_fade_system),
         )
         .run();
 }

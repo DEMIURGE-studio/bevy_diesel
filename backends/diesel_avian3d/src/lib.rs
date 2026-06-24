@@ -4,11 +4,14 @@ use bevy::prelude::*;
 use rand::RngCore;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::bevy_gauge::AttributeResolvable;
+use bevy_diesel::gauge::AttributeResolvable;
 
 // Re-exports
 
 pub use bevy_diesel;
+// Clean, prefix-free access to the underlying systems (à la `bevy::ecs`):
+// `diesel_avian3d::gauge` == the `bevy_gauge` crate, `::gearbox` == `bevy_gearbox`.
+pub use bevy_diesel::{gauge, gearbox};
 
 pub mod ballistics;
 pub mod collision;
@@ -32,7 +35,9 @@ pub mod prelude {
 
     // Vec3 type aliases
     pub type InvokerTarget = bevy_diesel::target::InvokerTarget<bevy::math::Vec3>;
-    pub type Target = bevy_diesel::target::Target<bevy::math::Vec3>;
+    /// Diesel's concrete aim/targeting type (where an ability is directed).
+    /// Named `AbilityTarget` to avoid colliding with gearbox's transition `Target`.
+    pub type AbilityTarget = bevy_diesel::target::Target<bevy::math::Vec3>;
     pub type GoOff = bevy_diesel::effect::GoOff<bevy::math::Vec3>;
     pub type StartInvoke = bevy_diesel::events::StartInvoke<bevy::math::Vec3>;
     pub type StopInvoke = bevy_diesel::events::StopInvoke<bevy::math::Vec3>;
@@ -46,10 +51,14 @@ pub mod prelude {
     pub type TargetMutator = bevy_diesel::target::TargetMutator<crate::AvianBackend>;
     pub type SpawnConfig = bevy_diesel::spawn::SpawnConfig<crate::AvianBackend>;
     pub type GoOffConfig = bevy_diesel::effect::GoOffConfig<crate::AvianBackend>;
+    pub type SustainedModifierConfig =
+        bevy_diesel::gauge_ext::modifiers::SustainedModifierConfig<crate::AvianBackend>;
 
     // Vec3-concrete template wrappers (shadow the generic versions from bevy_diesel::prelude)
 
     /// Outermost ability wrapper: Ready → Invoking → Cooldown, with Vec3 positions.
+    #[deprecated(note = "use `bevy_diesel::scenes::invoked` (a `bsn!` Scene) instead")]
+    #[allow(deprecated)]
     pub fn template_invoked<F>(
         commands: &mut bevy::prelude::Commands,
         entity: Option<bevy::prelude::Entity>,
@@ -59,22 +68,26 @@ pub mod prelude {
     where
         F: FnOnce(&mut bevy::prelude::EntityCommands),
     {
-        bevy_diesel::gearbox::templates::template_invoked::<bevy::math::Vec3, F>(
+        bevy_diesel::gearbox_ext::templates::template_invoked::<bevy::math::Vec3, F>(
             commands, entity, cooldown, configure_invoking,
         )
     }
 
     /// Single-shot fire → done state with the avian backend.
+    #[deprecated(note = "use `bevy_diesel::scenes::single_shot` (a `bsn!` Scene) instead")]
+    #[allow(deprecated)]
     pub fn template_single_shot<F>(
         on_fire: F,
     ) -> impl FnOnce(&mut bevy::prelude::EntityCommands)
     where
         F: FnOnce(&mut bevy::prelude::EntityCommands),
     {
-        bevy_diesel::gearbox::templates::template_single_shot::<crate::AvianBackend, F>(on_fire)
+        bevy_diesel::gearbox_ext::templates::template_single_shot::<crate::AvianBackend, F>(on_fire)
     }
 
     /// Counted volley sub-machine with Vec3 positions.
+    #[deprecated(note = "use `bevy_diesel::scenes::repeater` (a `bsn!` Scene) instead")]
+    #[allow(deprecated)]
     pub fn template_repeater<F>(
         count_expr: &str,
         delay_secs: f32,
@@ -83,7 +96,7 @@ pub mod prelude {
     where
         F: FnOnce(&mut bevy::prelude::EntityCommands),
     {
-        bevy_diesel::gearbox::templates::template_repeater::<bevy::math::Vec3, F>(
+        bevy_diesel::gearbox_ext::templates::template_repeater::<bevy::math::Vec3, F>(
             count_expr, delay_secs, on_tick,
         )
     }
@@ -415,12 +428,12 @@ impl Plugin for AvianDieselPlugin {
         app.add_plugins(AvianBackend::plugin_core());
 
         // Register AttributeDerived for concrete AvianBackend types
-        use bevy_diesel::bevy_gauge::prelude::AttributesAppExt;
+        use bevy_diesel::gauge::prelude::AttributesAppExt;
         app.register_attribute_derived::<bevy_diesel::spawn::SpawnConfig<AvianBackend>>();
         app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
 
         // Propagation: reads GoOffOrigin, writes GoOff
-        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule,
+        app.add_systems(bevy_diesel::gearbox::GearboxSchedule,
             (
                 bevy_diesel::effect::go_off_on_entry::<AvianBackend>,
                 propagate_observer::<AvianBackend>,
@@ -430,7 +443,7 @@ impl Plugin for AvianDieselPlugin {
         );
 
         // Leaf effect systems: read GoOff
-        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule, (
+        app.add_systems(bevy_diesel::gearbox::GearboxSchedule, (
             bevy_diesel::spawn::spawn_system::<AvianBackend>,
             bevy_diesel::print::print_effect::<Vec3>,
             impulse::impulse_effect_system,
@@ -440,8 +453,8 @@ impl Plugin for AvianDieselPlugin {
         // fn needs B::Context which can only resolve with a concrete backend.
         app.add_systems(
             Update,
-            bevy_diesel::gauge::modifiers::sustained_modifier_apply::<AvianBackend>
-                .in_set(bevy_diesel::gauge::SustainedModifierSet),
+            bevy_diesel::gauge_ext::modifiers::sustained_modifier_apply::<AvianBackend>
+                .in_set(bevy_diesel::gauge_ext::SustainedModifierSet),
         );
 
         // Avian3d-specific actions
@@ -450,11 +463,11 @@ impl Plugin for AvianDieselPlugin {
         // Collision types + system (unfiltered - entities with Collides marker)
         app.register_transition::<collision::CollidedEntity>();
         app.register_transition::<collision::CollidedPosition>();
-        app.add_systems(bevy_diesel::bevy_gearbox::GearboxSchedule, (
+        app.add_systems(bevy_diesel::gearbox::GearboxSchedule, (
             bevy_diesel::events::go_off_side_effect::<collision::CollidedEntity, Vec3>
-                .in_set(bevy_diesel::bevy_gearbox::GearboxPhase::SideEffectPhase),
+                .in_set(bevy_diesel::gearbox::GearboxPhase::SideEffectPhase),
             bevy_diesel::events::go_off_side_effect::<collision::CollidedPosition, Vec3>
-                .in_set(bevy_diesel::bevy_gearbox::GearboxPhase::SideEffectPhase),
+                .in_set(bevy_diesel::gearbox::GearboxPhase::SideEffectPhase),
         ));
         collision::plugin(app);
     }

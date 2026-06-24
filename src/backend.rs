@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_gearbox::RegistrationAppExt;
 
 use crate::events::{OnRepeat, StartInvoke, StopInvoke};
-use crate::gearbox::repeater;
+use crate::gearbox_ext::repeater;
 use crate::spawn::{OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget};
 use crate::target::{Scope, Target};
 
@@ -139,8 +139,8 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
 
         // Attribute system + PAE (persistent attribute effects with stat-gated guards)
         app.add_plugins(bevy_gauge::plugin::AttributesPlugin);
-        app.add_plugins(crate::gauge::DieselGaugePlugin::<B>::default());
-        app.add_plugins(crate::gauge::pae::DieselPaePlugin);
+        app.add_plugins(crate::gauge_ext::DieselGaugePlugin::<B>::default());
+        app.add_plugins(crate::gauge_ext::pae::DieselPaePlugin);
 
         // Template registry
         app.init_resource::<crate::spawn::TemplateRegistry>();
@@ -188,9 +188,9 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.add_message::<crate::effect::GoOff<B::Pos>>();
 
         // PAE transition messages
-        app.register_transition::<crate::gauge::pae::state_machine::PAETryApply>();
-        app.register_transition::<crate::gauge::pae::state_machine::PAESuspend>();
-        app.register_transition::<crate::gauge::pae::state_machine::PAEUnapplyApproved>();
+        app.register_transition::<crate::gauge_ext::pae::state_machine::PAETryApply>();
+        app.register_transition::<crate::gauge_ext::pae::state_machine::PAESuspend>();
+        app.register_transition::<crate::gauge_ext::pae::state_machine::PAEUnapplyApproved>();
 
         // Invocation
         app.register_transition::<crate::invoke::InvocationComplete>();

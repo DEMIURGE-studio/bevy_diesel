@@ -5,20 +5,23 @@ pub mod despawn;
 pub mod dot;
 pub mod effect;
 pub mod events;
-pub mod gauge;
-pub mod gearbox;
+pub mod gauge_ext;
+pub mod gearbox_ext;
 pub mod invoke;
 pub mod invoker;
 pub mod pipeline;
 pub mod print;
 pub mod propagation;
+pub mod scenes;
 pub mod spawn;
 pub mod subeffects;
 pub mod target;
 
-// Re-export upstream dependencies
-pub use bevy_gauge;
-pub use bevy_gearbox;
+// Re-export upstream dependencies under clean, prefix-free names (à la `bevy::ecs`).
+// `bevy_diesel::gauge` == the `bevy_gauge` crate; diesel's own integration layer
+// lives in `gauge_ext` / `gearbox_ext`.
+pub use bevy_gauge as gauge;
+pub use bevy_gearbox as gearbox;
 pub use inventory;
 
 /// System sets for ordering diesel's effect pipeline inside [`GearboxSchedule`].
@@ -47,8 +50,11 @@ pub enum DieselSet {
 pub mod prelude {
     pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
+    // NOTE: diesel's own aim `Target` is intentionally NOT preluded — the name is
+    // ceded to gearbox's transition `Target` (below), which dominates BSN authoring.
+    // The concrete aim target is exposed by backends as `AbilityTarget`.
     pub use crate::target::{
-        Scope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType,
+        Scope, InvokerTarget, TargetGenerator, TargetMutator, TargetType,
     };
     pub use crate::effect::{GoOff, GoOffConfig, SubEffectOf, SubEffects};
     pub use crate::events::{StartInvoke, StopInvoke, OnRepeat};
@@ -59,24 +65,26 @@ pub mod prelude {
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,
         SpawnConfig, TemplateRegistry, spawn_system,
     };
-    pub use crate::gauge::prelude::*;
+    pub use crate::gauge_ext::prelude::*;
     pub use crate::go_off;
-    pub use crate::gearbox::repeater::{Repeater, repeater_tick};
-    pub use crate::gearbox::templates::{
+    pub use crate::gearbox_ext::repeater::{Repeater, repeater_tick};
+    #[allow(deprecated)]
+    pub use crate::gearbox_ext::templates::{
         apply_sub_effect, template_invoked, template_repeater, template_single_shot,
     };
-    pub use bevy_gearbox::{RegistrationAppExt, GearboxMessage, AcceptAll};
-    pub use bevy_gearbox::prelude::{
-        AlwaysEdge, Delay, MessageEdge, Done, TerminalState,
-        InitialState, Source, StateMachine, StateComponent, SubstateOf,
-        SpawnSubstate, SpawnTransition, BuildTransition, SpawnBranch, TransitionExt, InitStateMachine,
-        GearboxSet, EnterState, ExitState, Active,
-    };
+    pub use crate::scenes::{invoked, repeater, single_shot};
+    // Surface gearbox's authoring + runtime API flat, so consumers building on
+    // diesel never name `bevy_gearbox` directly. (Carries gearbox's `Target`,
+    // `Substates`, `Transitions`, `GearboxSchedule`, `TransitionMessage`, etc.)
+    #[allow(deprecated)] // gearbox's prelude still carries its deprecated authoring traits
+    pub use bevy_gearbox::prelude::*;
+    pub use bevy_gearbox::Matched;
     pub use crate::propagation::{
         PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
         RegisterPropagationTarget, PropagationRegistrar,
         register_propagation_for, propagate_event,
     };
+    #[allow(deprecated)]
     pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};
     pub use crate::submit_propagation_for;
     pub use crate::despawn::{QueueDespawn, DelayedDespawn};

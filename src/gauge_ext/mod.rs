@@ -48,12 +48,12 @@ impl<B: SpatialBackend> Plugin for DieselGaugePlugin<B> {
 }
 
 pub mod prelude {
-    pub use crate::gauge::modifiers::{
+    pub use crate::gauge_ext::modifiers::{
         AttributeModifiers, SustainedModifierConfig, SustainedTarget,
     };
-    pub use crate::gauge::{DieselGaugePlugin, SustainedModifierSet};
+    pub use crate::gauge_ext::{DieselGaugePlugin, SustainedModifierSet};
 
-    pub use crate::gauge::pae::{
+    pub use crate::gauge_ext::pae::{
         DieselPaePlugin,
         PaeEntities,
         pae_state,
@@ -83,6 +83,7 @@ pub mod prelude {
         AttributeResolvable,
         InstantExt,
     };
+    pub use bevy_gauge::attributes;
     pub use bevy_gauge::mod_set;
     pub use bevy_gauge::instant;
     pub use bevy_gauge::requires;

@@ -1,3 +1,8 @@
+// This whole module is the deprecated imperative authoring API; it internally
+// uses the (also deprecated) `SpawnDieselSubstate` trait, so silence those
+// in-module deprecation warnings while the API lives on for downstream callers.
+#![allow(deprecated)]
+
 use std::time::Duration;
 
 use bevy::prelude::*;
@@ -5,7 +10,7 @@ use bevy_gearbox::prelude::*;
 
 use crate::effect::{GoOffConfig, SubEffectOf};
 use crate::events::{OnRepeat, PosBound, StartInvoke};
-use crate::gearbox::repeater::Repeater;
+use crate::gearbox_ext::repeater::Repeater;
 use crate::invoke::Ability;
 use crate::subeffects::SpawnDieselSubstate;
 use crate::target::TargetMutator;
@@ -13,6 +18,7 @@ use crate::backend::SpatialBackend;
 
 /// Convenience builder that wraps a component in a sub-effect node with a
 /// `TargetMutator::invoker()` for target resolution.
+#[deprecated(note = "use `bsn!` scenes — author sub-effects as bare `SubEffectOf(#State)` entries (see bevy_diesel::scenes)")]
 pub fn apply_sub_effect<B: SpatialBackend>(
     effect: impl Component,
 ) -> impl FnOnce(&mut EntityCommands) {
@@ -40,6 +46,7 @@ pub fn apply_sub_effect<B: SpatialBackend>(
 /// The Invoking state transitions to Cooldown when it receives a `Done` message
 /// from a child terminal state. For single-shot abilities (no repeater), a
 /// terminal "Done" substate is automatically added with an always-edge.
+#[deprecated(note = "use `bevy_diesel::scenes::invoked` (a `bsn!` Scene) instead")]
 pub fn template_invoked<P: PosBound, F>(
     commands: &mut Commands,
     entity: Option<Entity>,
@@ -97,6 +104,7 @@ where
 ///
 /// When the repeater exhausts its count, it transitions to a `TerminalState`
 /// child which emits `Done` to the parent.
+#[deprecated(note = "use `bevy_diesel::scenes::repeater` (a `bsn!` Scene) instead")]
 pub fn template_repeater<P: PosBound, F>(
     count_expr: &str,
     delay_secs: f32,
@@ -168,6 +176,7 @@ where
 ///
 /// Use this for one-shot abilities (no repeater). The child becomes the
 /// `InitialState` of the parent.
+#[deprecated(note = "use `bevy_diesel::scenes::single_shot` (a `bsn!` Scene) instead")]
 pub fn template_single_shot<B: SpatialBackend, F>(
     on_fire: F,
 ) -> impl FnOnce(&mut EntityCommands)

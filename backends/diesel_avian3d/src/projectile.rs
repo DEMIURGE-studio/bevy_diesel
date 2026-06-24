@@ -2,7 +2,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use crate::ballistics::calculate_low_angle_velocity_with_speed;
-use crate::prelude::Target;
+use crate::prelude::AbilityTarget as Target;
 
 // ---------------------------------------------------------------------------
 // ProjectileEffect - physics-driven ballistic arc

@@ -49,13 +49,13 @@ impl Repeater {
 /// - `!is_added()` (re-entry): decrement, write [`OnRepeat`] if remaining > 0,
 ///   else [`Done`] targeting the parent
 pub fn repeater_tick<P: PosBound>(
-    q_changed: Query<(Entity, &Active, Ref<Active>), (Changed<Active>, With<Repeater>)>,
+    q_changed: Query<(Entity, Ref<Active>), (Changed<Active>, With<Repeater>)>,
     q_substate_of: Query<&SubstateOf>,
     mut q_repeater: Query<&mut Repeater>,
     mut writer_repeat: MessageWriter<OnRepeat<P>>,
     mut writer_done: MessageWriter<Done>,
 ) {
-    for (entity, active, active_ref) in &q_changed {
+    for (entity, active_ref) in &q_changed {
         let Ok(mut repeater) = q_repeater.get_mut(entity) else {
             continue;
         };
@@ -65,7 +65,8 @@ pub fn repeater_tick<P: PosBound>(
 
         if active_ref.is_added() {
             // Initial entry — reset counter, decrement, fire first tick
-            repeater.remaining = repeater.initial - 1;
+            // (saturating to avoid a u32 underflow panic when RepeatCount == 0)
+            repeater.remaining = repeater.initial.saturating_sub(1);
             writer_repeat.write(OnRepeat::new(entity, target));
         } else if repeater.remaining > 0 {
             // Re-entry via Apply→Repeater bounce — decrement and fire

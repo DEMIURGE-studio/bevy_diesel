@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_gearbox::prelude::*;
 
-use crate::gauge::pae::state_machine::EffectTarget;
+use crate::gauge_ext::pae::state_machine::EffectTarget;
 use crate::invoke::Ability;
 
 // ================= Types =================

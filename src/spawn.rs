@@ -11,7 +11,7 @@ use bevy_gauge::resolvable::AttributeResolvable;
 
 use crate::backend::SpatialBackend;
 use crate::diagnostics::diesel_debug;
-use crate::effect::{GoOff, GoOffOrigin};
+use crate::effect::GoOff;
 use crate::invoke::Ability;
 use crate::invoker::InvokedBy;
 use crate::pipeline::generate_targets;
@@ -161,6 +161,18 @@ impl<B: SpatialBackend> SpawnConfig<B> {
         B::Pos: Default,
     {
         Self::at_position(template_id, B::Pos::default())
+    }
+
+    /// Single-call form of
+    /// `invoker(id).with_offset(offset).with_target_generator(generator)`.
+    pub fn invoker_offset_target(
+        template_id: &str,
+        offset: B::Offset,
+        target_generator: TargetGenerator<B>,
+    ) -> Self {
+        Self::invoker(template_id)
+            .with_offset(offset)
+            .with_target_generator(target_generator)
     }
 
     pub fn with_offset(mut self, offset: B::Offset) -> Self {

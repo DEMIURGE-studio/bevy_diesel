@@ -4,7 +4,7 @@ use avian3d::prelude::{CollisionLayers, CollisionStart, Collisions, LayerMask, P
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::bevy_gearbox::MessageValidator;
+use bevy_diesel::gearbox::MessageValidator;
 use bevy_diesel::effect::GoOffOrigin;
 use bevy_diesel::events::{HasDieselTarget, PosBound};
 use bevy_diesel::target::Target as DieselTarget;
@@ -192,7 +192,7 @@ fn emit_entity_if(
         .or_else(|| q_position.get(target).ok().map(|p| p.0))
         .unwrap_or(Vec3::ZERO);
     let layers = target_layers(q_layers, target);
-    writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos), layers));
+    writer.write(CollidedEntity::new(ability, DieselTarget::entity(target, collision_pos), layers));
 }
 
 fn emit_position_if(
@@ -207,7 +207,7 @@ fn emit_position_if(
         return;
     }
     let layers = target_layers(q_layers, target);
-    writer.write(CollidedPosition::new(ability, Target::entity(target, position), layers));
+    writer.write(CollidedPosition::new(ability, DieselTarget::entity(target, position), layers));
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +292,7 @@ fn emit_entity_filtered<F: CollisionFilter>(
             .or_else(|| q_position.get(target).ok().map(|p| p.0))
             .unwrap_or(Vec3::ZERO);
         let layers = target_layers(q_layers, target);
-        writer.write(CollidedEntity::new(ability, Target::entity(target, collision_pos), layers));
+        writer.write(CollidedEntity::new(ability, DieselTarget::entity(target, collision_pos), layers));
     }
 }
 
@@ -308,6 +308,6 @@ fn emit_position_filtered<F: CollisionFilter>(
 ) {
     if can_target_filtered(q_filter, q_lookup, q_invoker, ability, target) {
         let layers = target_layers(q_layers, target);
-        writer.write(CollidedPosition::new(ability, Target::entity(target, position), layers));
+        writer.write(CollidedPosition::new(ability, DieselTarget::entity(target, position), layers));
     }
 }
