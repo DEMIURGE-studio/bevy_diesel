@@ -1,5 +1,7 @@
 //! Reusable BSN scene helpers for diesel's invoker/effect hierarchies.
 
+use std::time::Duration;
+
 use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
