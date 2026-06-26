@@ -5,8 +5,7 @@ use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
 use bevy_diesel::gearbox::MessageValidator;
-use bevy_diesel::effect::GoOffOrigin;
-use bevy_diesel::events::{HasDieselTarget, PosBound};
+use bevy_diesel::events::HasDieselTarget;
 use bevy_diesel::target::Target as DieselTarget;
 
 // ---------------------------------------------------------------------------

@@ -54,7 +54,59 @@ pub mod prelude {
     pub type SustainedModifierConfig =
         bevy_diesel::gauge_ext::modifiers::SustainedModifierConfig<crate::AvianBackend>;
 
-    // Vec3-concrete template wrappers (shadow the generic versions from bevy_diesel::prelude)
+    // Vec3-concrete scene helpers — fix the position type so abilities read
+    // `invoked(...)` / `repeater(...)` without a `::<Vec3, _, _>` turbofish. These
+    // shadow the generic re-exports glob-imported from `bevy_diesel::prelude`.
+
+    /// Vec3-concrete [`bevy_diesel::scenes::invoked`].
+    pub fn invoked<F, S>(
+        name: &'static str,
+        cooldown_secs: f32,
+        make_inner: F,
+    ) -> impl bevy::scene::prelude::Scene
+    where
+        F: Fn(bevy::ecs::template::EntityTemplate) -> S + Send + Sync + 'static,
+        S: bevy::scene::prelude::Scene,
+    {
+        bevy_diesel::scenes::invoked::<bevy::math::Vec3, F, S>(name, cooldown_secs, make_inner)
+    }
+
+    /// Vec3-concrete [`bevy_diesel::scenes::invoked_with`].
+    pub fn invoked_with<F, S>(
+        name: &'static str,
+        cooldown_secs: f32,
+        base: bevy_diesel::gauge::modifier_set::ModifierSet,
+        make_inner: F,
+    ) -> impl bevy::scene::prelude::Scene
+    where
+        F: Fn(bevy::ecs::template::EntityTemplate) -> S + Send + Sync + 'static,
+        S: bevy::scene::prelude::Scene,
+    {
+        bevy_diesel::scenes::invoked_with::<bevy::math::Vec3, F, S>(
+            name,
+            cooldown_secs,
+            base,
+            make_inner,
+        )
+    }
+
+    /// Vec3-concrete [`bevy_diesel::scenes::repeater`].
+    pub fn repeater(
+        root: bevy::ecs::template::EntityTemplate,
+        count_expr: &'static str,
+        interval_expr: &'static str,
+        on_fire: impl bevy::scene::prelude::Scene,
+    ) -> impl bevy::scene::prelude::Scene {
+        bevy_diesel::scenes::repeater::<bevy::math::Vec3>(root, count_expr, interval_expr, on_fire)
+    }
+
+    /// Vec3-concrete [`bevy_diesel::scenes::single_shot`] for the avian backend.
+    pub fn single_shot(
+        root: bevy::ecs::template::EntityTemplate,
+        on_fire: impl bevy::scene::prelude::Scene,
+    ) -> impl bevy::scene::prelude::Scene {
+        bevy_diesel::scenes::single_shot::<crate::AvianBackend>(root, on_fire)
+    }
 
     /// Outermost ability wrapper: Ready → Invoking → Cooldown, with Vec3 positions.
     #[deprecated(note = "use `bevy_diesel::scenes::invoked` (a `bsn!` Scene) instead")]
@@ -431,6 +483,7 @@ impl Plugin for AvianDieselPlugin {
         use bevy_diesel::gauge::prelude::AttributesAppExt;
         app.register_attribute_derived::<bevy_diesel::spawn::SpawnConfig<AvianBackend>>();
         app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
+        app.register_attribute_derived::<projectile::LinearProjectileEffect>();
 
         // Propagation: reads GoOffOrigin, writes GoOff
         app.add_systems(bevy_diesel::gearbox::GearboxSchedule,

@@ -75,14 +75,14 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
     >,
     mut ctx: B::Context<'_, '_>,
     q_invoker: Query<&InvokedBy>,
-    q_child_of: Query<&ChildOf>,
+    q_substate_of: Query<&bevy_gearbox::SubstateOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut attributes: AttributesMut,
     mut commands: Commands,
 ) {
     for (entity, modifiers, config) in &q_new {
         let invoker = resolve_invoker(&q_invoker, entity);
-        let root = resolve_root(&q_child_of, entity);
+        let root = resolve_root(&q_substate_of, entity);
         let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
             Ok(it) => Target::from(*it),
             Err(_) => {

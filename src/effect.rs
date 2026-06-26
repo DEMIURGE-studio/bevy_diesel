@@ -212,7 +212,7 @@ pub fn go_off_on_entry<B: SpatialBackend>(
     q_new: Query<(Entity, &GoOffConfig<B>), Added<Active>>,
     mut ctx: B::Context<'_, '_>,
     q_invoker: Query<&InvokedBy>,
-    q_child_of: Query<&ChildOf>,
+    q_substate_of: Query<&bevy_gearbox::SubstateOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut writer: MessageWriter<GoOffOrigin<B::Pos>>,
 ) {
@@ -222,7 +222,7 @@ pub fn go_off_on_entry<B: SpatialBackend>(
     diesel_debug!("[diesel] go_off_on_entry: {} newly-active GoOffConfig entities", q_new.iter().count());
     for (entity, config) in &q_new {
         let invoker = resolve_invoker(&q_invoker, entity);
-        let root = resolve_root(&q_child_of, entity);
+        let root = resolve_root(&q_substate_of, entity);
         let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
             Ok(it) => Target::from(*it),
             Err(_) => {

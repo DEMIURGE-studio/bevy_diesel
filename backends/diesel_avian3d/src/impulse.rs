@@ -1,7 +1,6 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy_diesel::effect::GoOff;
-use bevy_diesel::invoker::InvokedBy;
 
 // ---------------------------------------------------------------------------
 // ImpulseEffect — apply physics impulse to targets on GoOff

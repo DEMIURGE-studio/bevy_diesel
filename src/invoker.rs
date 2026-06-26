@@ -47,34 +47,53 @@ pub fn resolve_invoker(q_invoker: &Query<&InvokedBy>, entity: Entity) -> Entity 
     q_invoker.root_ancestor(entity)
 }
 
-/// Walk the `ChildOf` chain to find the root ancestor entity.
-pub fn resolve_root(q_child_of: &Query<&ChildOf>, entity: Entity) -> Entity {
-    q_child_of.root_ancestor(entity)
+/// Walk the `SubstateOf` chain to the state-machine (scene) root entity.
+///
+/// diesel effects live in gearbox's *state* hierarchy (`SubstateOf`), not the
+/// transform hierarchy (`ChildOf`), so this is how the ability / spawned-scene
+/// root — the entity carrying the `Transform`, used by `TargetType::Root` and
+/// `root_gathering` — is found from any effect/sub-state entity.
+pub fn resolve_root(
+    q_substate_of: &Query<&bevy_gearbox::SubstateOf>,
+    entity: Entity,
+) -> Entity {
+    q_substate_of.root_ancestor(entity)
 }
 
 // ---------------------------------------------------------------------------
 // Gauge source auto-registration
 // ---------------------------------------------------------------------------
 
-/// Register the root invoker as a gauge attribute source when `InvokedBy` is added.
+/// Register gauge sources when `InvokedBy` is added: `@invoker` (the root of the
+/// invoker chain — the player) and `@ability` (the nearest [`Ability`] ancestor —
+/// the spell), so sub-state expressions like `"Cooldown@ability"` resolve.
 pub(crate) fn register_invoker_source(
     add: On<Add, InvokedBy>,
     q_invoker: Query<&InvokedBy>,
+    q_ability: Query<(), With<crate::invoke::Ability>>,
     mut attributes: AttributesMut,
 ) {
     let entity = add.entity;
     let invoker = q_invoker.root_ancestor(entity);
     attributes.register_source(entity, "invoker", invoker);
+    if let Some(ability) = crate::spawn::find_ability(entity, &q_invoker, &q_ability) {
+        attributes.register_source(entity, "ability", ability);
+    }
 }
 
-/// Update gauge sources when `InvokedBy` changes on entities that have `Attributes`.
+/// Update `@invoker`/`@ability` sources when `InvokedBy` changes on entities that
+/// have `Attributes`.
 pub(crate) fn on_invoker_changed_system(
     q_changed: Query<Entity, (Changed<InvokedBy>, With<Attributes>)>,
     q_invoker: Query<&InvokedBy>,
+    q_ability: Query<(), With<crate::invoke::Ability>>,
     mut attributes: AttributesMut,
 ) {
     for entity in q_changed.iter() {
         let invoker = q_invoker.root_ancestor(entity);
         attributes.register_source(entity, "invoker", invoker);
+        if let Some(ability) = crate::spawn::find_ability(entity, &q_invoker, &q_ability) {
+            attributes.register_source(entity, "ability", ability);
+        }
     }
 }

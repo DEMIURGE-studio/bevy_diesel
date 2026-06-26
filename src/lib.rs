@@ -72,7 +72,7 @@ pub mod prelude {
     pub use crate::gearbox_ext::templates::{
         apply_sub_effect, template_invoked, template_repeater, template_single_shot,
     };
-    pub use crate::scenes::{invoked, repeater, single_shot};
+    pub use crate::scenes::{invoked, invoked_with, repeater, single_shot};
     // Surface gearbox's authoring + runtime API flat, so consumers building on
     // diesel never name `bevy_gearbox` directly. (Carries gearbox's `Target`,
     // `Substates`, `Transitions`, `GearboxSchedule`, `TransitionMessage`, etc.)

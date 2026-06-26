@@ -202,7 +202,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // Ability pool (RegisterAbility / UnregisterAbility observers)
         app.add_plugins(crate::ability_pool::DieselAbilityPoolPlugin);
 
-        // Invoker → gauge source auto-registration
+        // Invoker → gauge source auto-registration (also registers `@ability`)
         app.add_observer(crate::invoker::register_invoker_source);
         app.add_systems(Update, crate::invoker::on_invoker_changed_system);
 

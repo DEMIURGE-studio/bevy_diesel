@@ -17,8 +17,14 @@ use crate::invoker::InvokedBy;
 use crate::pipeline::generate_targets;
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
 
-/// Walk the `InvokedBy` chain and return the first ancestor with `Ability`.
-fn find_ability(
+/// Walk the `InvokedBy` chain and return the first ancestor with `Ability` — the
+/// spell that owns `entity`.
+///
+/// This resolves at *any* spawn depth because `spawn_system` preserves the
+/// `InvokedBy` chain: a spawned entity's root points at its owning ability (not
+/// collapsed to the invoker/player), so the walk climbs projectile → spell, or
+/// pulse → zone → spell, before reaching the player.
+pub(crate) fn find_ability(
     entity: Entity,
     q_invoker: &Query<&InvokedBy>,
     q_ability: &Query<(), With<Ability>>,
@@ -317,7 +323,7 @@ pub fn spawn_system<B: SpatialBackend>(
     mut reader: MessageReader<GoOff<B::Pos>>,
     q_effect: Query<&SpawnConfig<B>>,
     q_invoker: Query<&InvokedBy>,
-    q_child_of: Query<&ChildOf>,
+    q_substate_of: Query<&bevy_gearbox::SubstateOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     q_ability: Query<(), With<Ability>>,
     template_registry: Res<TemplateRegistry>,
@@ -347,7 +353,16 @@ pub fn spawn_system<B: SpatialBackend>(
             diesel_debug!("[diesel] spawn_system: GoOff for {:?} — no SpawnConfig, skipping", effect_entity);
             continue;
         };
-        let root = q_child_of.root_ancestor(effect_entity);
+        let root = crate::invoker::resolve_root(&q_substate_of, effect_entity);
+
+        // Preserve the `InvokedBy` chain through the spawn boundary: point the
+        // spawned entity at the ability that owns this effect (the spell), not
+        // collapsed to the invoker. That keeps the chain intact so `@ability`
+        // resolves to the spell at *any* spawn depth (projectile → spell, or
+        // pulse → zone → spell), while `@invoker` still climbs to the player via
+        // `root_ancestor`. Effects with no owning ability fall back to the invoker.
+        let owning_ability = find_ability(effect_entity, &q_invoker, &q_ability);
+        let spawn_parent = owning_ability.unwrap_or(invoker);
 
         diesel_debug!("[diesel] spawn_system: received GoOff for {:?}, template='{}', invoker={:?}",
             effect_entity, spawn_config.template_id, invoker);
@@ -413,7 +428,7 @@ pub fn spawn_system<B: SpatialBackend>(
         };
 
         for (i, (spawn_target, spawn_scope)) in spawn_targets.iter().enumerate() {
-            let spawned_entity = commands.spawn(InvokedBy(invoker)).id();
+            let spawned_entity = commands.spawn(InvokedBy(spawn_parent)).id();
             B::insert_position(
                 &mut commands.entity(spawned_entity),
                 &ctx,
@@ -436,7 +451,7 @@ pub fn spawn_system<B: SpatialBackend>(
             // Attributes + modifiers are applied later (during command flush),
             // expressions like "Damage@root" or "Cooldown@ability" will resolve.
             attributes.register_source(spawned_entity, "root", root);
-            if let Some(ability) = find_ability(effect_entity, &q_invoker, &q_ability) {
+            if let Some(ability) = owning_ability {
                 attributes.register_source(spawned_entity, "ability", ability);
             }
 

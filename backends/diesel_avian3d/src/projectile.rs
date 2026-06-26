@@ -1,6 +1,8 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+use bevy_diesel::gauge::prelude::{AttributeDerived, Attributes};
+
 use crate::ballistics::calculate_low_angle_velocity_with_speed;
 use crate::prelude::AbilityTarget as Target;
 
@@ -56,6 +58,24 @@ impl LinearProjectileEffect {
     pub fn horizontal(mut self) -> Self {
         self.horizontal = true;
         self
+    }
+}
+
+/// Gauge-drive the projectile's speed from a `"Speed"` attribute on its own
+/// entity (single relevant field, hard-coded name — same convention as gearbox's
+/// `Delay`). Authoring `"Speed" => "ProjectileSpeed@ability"` therefore makes the
+/// projectile track the spell's (player-scaled) speed; the literal `speed` is the
+/// pre-sync initial. Movement reads this live value, so a mid-flight change applies.
+impl AttributeDerived for LinearProjectileEffect {
+    fn should_update(&self, attrs: &Attributes) -> bool {
+        let speed = attrs.value("Speed");
+        speed > 0.0 && (self.speed - speed).abs() > f32::EPSILON
+    }
+    fn update_from_attributes(&mut self, attrs: &Attributes) {
+        let speed = attrs.value("Speed");
+        if speed > 0.0 {
+            self.speed = speed;
+        }
     }
 }
 
@@ -144,10 +164,13 @@ fn init_linear_target(
 // ---------------------------------------------------------------------------
 
 fn move_linear_projectiles(
-    mut q_projectile: Query<(&mut Transform, &LinearProjectile)>,
+    // Speed comes from the gauge-synced effect (see `AttributeDerived`), so it
+    // reflects the spell's scaled `ProjectileSpeed`; `LinearProjectile` carries
+    // only the launch direction.
+    mut q_projectile: Query<(&mut Transform, &LinearProjectile, &LinearProjectileEffect)>,
     time: Res<Time>,
 ) {
-    for (mut transform, projectile) in q_projectile.iter_mut() {
-        transform.translation += projectile.direction * projectile.speed * time.delta_secs();
+    for (mut transform, projectile, effect) in q_projectile.iter_mut() {
+        transform.translation += projectile.direction * effect.speed * time.delta_secs();
     }
 }

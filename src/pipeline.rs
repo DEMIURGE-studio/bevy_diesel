@@ -80,7 +80,7 @@ pub fn propagate_system<B: SpatialBackend>(
     q_sub_effects: Query<&SubEffects>,
     q_target_mutator: Query<Option<&TargetMutator<B>>>,
     q_invoker: Query<&InvokedBy>,
-    q_child_of: Query<&ChildOf>,
+    q_substate_of: Query<&bevy_gearbox::SubstateOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
     mut writer: MessageWriter<GoOff<B::Pos>>,
 ) {
@@ -90,7 +90,7 @@ pub fn propagate_system<B: SpatialBackend>(
         diesel_debug!("[diesel] propagate: received GoOffOrigin for {:?}", root_entity);
 
         let invoker = resolve_invoker(&q_invoker, root_entity);
-        let root = resolve_root(&q_child_of, root_entity);
+        let root = resolve_root(&q_substate_of, root_entity);
         let invoker_target: Target<B::Pos> = match q_invoker_target.get(invoker) {
             Ok(it) => Target::from(*it),
             Err(_) => {
