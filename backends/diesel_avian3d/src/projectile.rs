@@ -7,7 +7,7 @@ use crate::ballistics::calculate_low_angle_velocity_with_speed;
 use crate::prelude::AbilityTarget as Target;
 
 // ---------------------------------------------------------------------------
-// ProjectileEffect - physics-driven ballistic arc
+// ProjectileEffect: physics-driven ballistic arc
 // ---------------------------------------------------------------------------
 
 /// Ballistic projectile. Calculates launch velocity from `Target` and `Gravity`.
@@ -31,7 +31,7 @@ impl ProjectileEffect {
 }
 
 // ---------------------------------------------------------------------------
-// LinearProjectileEffect - straight-line constant speed
+// LinearProjectileEffect: straight-line constant speed
 // ---------------------------------------------------------------------------
 
 /// Straight-line projectile at constant speed, ignoring gravity.
@@ -62,10 +62,10 @@ impl LinearProjectileEffect {
 }
 
 /// Gauge-drive the projectile's speed from a `"Speed"` attribute on its own
-/// entity (single relevant field, hard-coded name — same convention as gearbox's
-/// `Delay`). Authoring `"Speed" => "ProjectileSpeed@ability"` therefore makes the
-/// projectile track the spell's (player-scaled) speed; the literal `speed` is the
-/// pre-sync initial. Movement reads this live value, so a mid-flight change applies.
+/// entity (single relevant field, hard-coded name, same convention as gearbox's
+/// `Delay`). Authoring `"Speed" => "ProjectileSpeed@ability"` makes the projectile
+/// track the spell's (player-scaled) speed; the literal `speed` is the pre-sync
+/// initial. Movement reads the synced value, so a mid-flight change applies.
 impl AttributeDerived for LinearProjectileEffect {
     fn should_update(&self, attrs: &Attributes) -> bool {
         let speed = attrs.value("Speed");
@@ -101,7 +101,7 @@ impl Plugin for ProjectilePlugin {
 }
 
 // ---------------------------------------------------------------------------
-// Ballistic - set velocity when Target is added
+// Ballistic: set velocity when Target is added
 // ---------------------------------------------------------------------------
 
 fn init_ballistic_target(
@@ -129,7 +129,7 @@ fn init_ballistic_target(
 }
 
 // ---------------------------------------------------------------------------
-// Linear - calculate direction and insert runtime component
+// Linear: calculate direction and insert runtime component
 // ---------------------------------------------------------------------------
 
 fn init_linear_target(
@@ -164,9 +164,9 @@ fn init_linear_target(
 // ---------------------------------------------------------------------------
 
 fn move_linear_projectiles(
-    // Speed comes from the gauge-synced effect (see `AttributeDerived`), so it
-    // reflects the spell's scaled `ProjectileSpeed`; `LinearProjectile` carries
-    // only the launch direction.
+    // Speed comes from the gauge-synced effect (see `AttributeDerived`), reflecting
+    // the spell's scaled `ProjectileSpeed`; `LinearProjectile` carries only the
+    // launch direction.
     mut q_projectile: Query<(&mut Transform, &LinearProjectile, &LinearProjectileEffect)>,
     time: Res<Time>,
 ) {

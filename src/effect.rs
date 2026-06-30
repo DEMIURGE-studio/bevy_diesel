@@ -23,12 +23,12 @@ pub trait MessageScope {
 }
 
 // ---------------------------------------------------------------------------
-// GoOffOrigin<P> — root trigger, consumed by propagate_system
+// GoOffOrigin<P>: root trigger, consumed by propagate_system
 // ---------------------------------------------------------------------------
 
 /// Written by SideEffect impls when a transition message fires. The
-/// propagation system walks the SubEffects tree starting at `entity` and
-/// writes a [`GoOff`] for every descendant effect.
+/// propagation system walks the SubEffects tree from `entity` and writes a
+/// [`GoOff`] for every descendant effect.
 #[derive(Message, Clone)]
 pub struct GoOffOrigin<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
@@ -55,13 +55,12 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOffOrigin<P> {
 }
 
 // ---------------------------------------------------------------------------
-// GoOff<P> — resolved per-effect message, consumed by leaf systems
+// GoOff<P>: resolved per-effect message, consumed by leaf systems
 // ---------------------------------------------------------------------------
 
 /// A resolved "go off" for a single effect entity. Written by
 /// [`propagate_system`](crate::pipeline::propagate_system) after walking the
-/// SubEffects tree. Leaf systems (print, spawn, despawn, modifiers, etc.)
-/// read this.
+/// SubEffects tree. Read by leaf systems (print, spawn, despawn, modifiers).
 #[derive(Message, Clone)]
 pub struct GoOff<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
     pub entity: Entity,
@@ -112,17 +111,17 @@ impl SubEffects {
     }
 }
 
-/// Configures automatic `GoOffOrigin` emission when this state gains `Active`.
-/// Use this for states that enter without a message edge (e.g. via `InitialState`
-/// or `AlwaysEdge`) but still need the diesel effect pipeline to fire.
+/// Emits `GoOffOrigin` when this state gains `Active`. For states that enter
+/// without a message edge (e.g. via `InitialState` or `AlwaysEdge`) but still
+/// need the diesel effect pipeline to fire.
 ///
 /// Carries a [`TargetGenerator`] that resolves 1..N targets when the state
-/// activates. One `GoOffOrigin` is emitted per resolved target.
+/// activates. Emits one `GoOffOrigin` per resolved target.
 ///
-/// Defaults to `TargetType::InvokerTarget` (the invoker's current target),
-/// which matches the typical "ability fires at the thing I'm aiming at"
-/// behavior. Use [`GoOffConfig::invoker`] for self-targeting (e.g. a heal)
-/// or a custom generator for gathered/filtered targets.
+/// Defaults to `TargetType::InvokerTarget` (the invoker's current target):
+/// "ability fires at the thing I'm aiming at". Use [`GoOffConfig::invoker`]
+/// for self-targeting (e.g. a heal) or a custom generator for
+/// gathered/filtered targets.
 #[derive(Component, Clone, Debug)]
 pub struct GoOffConfig<B: SpatialBackend> {
     pub generator: TargetGenerator<B>,
@@ -153,7 +152,7 @@ impl<B: SpatialBackend> GoOffConfig<B> {
         Self::new(TargetGenerator::at_invoker())
     }
 
-    /// Target the invoker's current target (default — combat abilities).
+    /// Target the invoker's current target (default; combat abilities).
     pub fn invoker_target() -> Self {
         Self::new(TargetGenerator::at_invoker_target())
     }
@@ -234,9 +233,8 @@ pub fn go_off_on_entry<B: SpatialBackend>(
             }
         };
 
-        // Resolve the generator into a list of targets. The `passed` input
-        // is the invoker target by default — only relevant if the generator
-        // uses TargetType::Passed.
+        // Resolve the generator into a list of targets. `passed` defaults to
+        // the invoker target; relevant only for TargetType::Passed.
         let mut targets = generate_targets::<B>(
             &config.generator,
             &mut ctx,

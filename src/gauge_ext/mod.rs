@@ -9,9 +9,9 @@ use bevy::prelude::*;
 use crate::backend::SpatialBackend;
 
 /// System set for sustained modifier systems. Runs in `Update` after
-/// `GearboxSet` so it can react to `Active` component lifecycle.
+/// `GearboxSet` to react to `Active` component lifecycle.
 /// The backend crate must register `sustained_modifier_apply::<B>` into
-/// this set — the generic fn can only be monomorphized there.
+/// this set: the generic fn can only be monomorphized there.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SustainedModifierSet;
 
@@ -31,10 +31,10 @@ impl<B: SpatialBackend> Plugin for DieselGaugePlugin<B> {
     fn build(&self, app: &mut App) {
         app.add_systems(bevy_gearbox::GearboxSchedule, instant::instant_set_system::<B::Pos>.in_set(crate::DieselSet::AttributeEffects));
 
-        // Configure the sustained modifier set ordering. The remove system
-        // is non-generic and registered here. The apply system is generic
-        // over B (needs B::Context) and must be registered by the backend
-        // crate into this set.
+        // Sustained modifier set ordering. The remove system has no generic
+        // params and is registered here. The apply system is generic over B
+        // (needs B::Context) and must be registered by the backend crate into
+        // this set.
         app.configure_sets(
             Update,
             SustainedModifierSet.after(bevy_gearbox::GearboxSet),

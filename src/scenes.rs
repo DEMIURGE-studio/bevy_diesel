@@ -16,11 +16,11 @@ use crate::gearbox_ext::repeater::Repeater;
 use crate::invoke::Ability;
 use crate::invoker::InvokedBy;
 
-/// Ready ↔ Invoking ↔ Cooldown ability shell.
+/// Ready <-> Invoking <-> Cooldown ability shell.
 ///
 /// `make_inner` receives the ability root (`#Root`, threaded for `InvokedBy`)
-/// and returns the Invoking state's inner sub-chart. The Invoking state leaves 
-/// for Cooldown when its inner chart emits `Done` (e.g. a `TerminalState`); 
+/// and returns the Invoking state's inner sub-chart. Invoking transitions to
+/// Cooldown when its inner chart emits `Done` (e.g. a `TerminalState`);
 /// Cooldown returns to Ready after `cooldown` elapses.
 pub fn invoked<P, F, S>(name: &'static str, cooldown_secs: f32, make_inner: F) -> impl Scene
 where
@@ -37,18 +37,18 @@ where
 }
 
 /// Like [`invoked`], but seeds the ability root with extra base attributes
-/// (merged with the shell's own `"Cooldown"` and `"Damage"`). AoE abilities
+/// (merged with the shell's own `"Cooldown"` and `"Damage"`).
 ///
 /// The shell seeds two per-ability stats every ability shares: `"Cooldown"` (the
 /// fire interval, in seconds) and `"Damage"` (a `1.0`-based damage multiplier the
 /// ability's effects read as `"...@ability"`). Per-ability rank-ups are gauge
-/// instants on these — e.g. `instant!{ "Damage" += 0.5 }` on the ability root.
+/// instants on these, e.g. `instant!{ "Damage" += 0.5 }` on the ability root.
 ///
 /// Both seeds are defaults: if `base` already defines `"Cooldown"` or `"Damage"`,
-/// the caller's version wins. This is how a game folds its own globals into an
-/// ability's effective stats (e.g. `"Cooldown" => "0.8 * CooldownMult@invoker"`)
-/// without the generic shell knowing any game-specific attribute names — the
-/// structural `cooldown_secs` is still used for the cooldown edge's initial delay.
+/// the caller's version wins. A game folds its own globals into an ability's
+/// effective stats (e.g. `"Cooldown" => "0.8 * CooldownMult@invoker"`) with no
+/// game-specific attribute names in the generic shell. The structural
+/// `cooldown_secs` still drives the cooldown edge's initial delay.
 pub fn invoked_with<P, F, S>(
     name: &'static str,
     cooldown_secs: f32,
@@ -87,9 +87,9 @@ where
                 #Inner make_inner(#Ability)
             ],
 
-            // The cooldown edge's own `Delay` attribute aliases the ability's
+            // The cooldown edge's `Delay` attribute aliases the ability's
             // `Cooldown` via the `@ability` source (registered from its
-            // `InvokedBy(#Ability)`), and `Delay` is gauge-derived — so
+            // `InvokedBy(#Ability)`), and `Delay` is gauge-derived, so
             // modifiers/instants on `Cooldown` change the fire rate live.
             #Cooldown Transitions [
                 (Target(#Ready) AlwaysEdge Delay::from_secs_f32(cooldown_secs)
@@ -104,13 +104,13 @@ where
 ///
 /// `root` is the ability root (threaded for `InvokedBy`); `count_expr` and
 /// `interval_expr` are gauge expressions for the repeat count (`"RepeatCount"`)
-/// and the per-tick interval in seconds (the `Fire→Repeater` edge's gauge-derived
+/// and the per-tick interval in seconds (the `Fire->Repeater` edge's gauge-derived
 /// `"Delay"`); `on_fire` is merged onto the `Fire` state and runs once per tick.
 /// When the count is exhausted the repeater emits `Done` to its parent.
 ///
 /// Both expressions resolve against `root`'s sources (`@invoker`, `@ability`), so
-/// a game scales the cadence with its own stats — e.g. `"0.12 / AttackSpeed@invoker"`
-/// — without this generic helper naming them. The edge's literal delay is a small
+/// a game scales the cadence with its own stats (e.g. `"0.12 / AttackSpeed@invoker"`)
+/// with no stat names in this generic helper. The edge's literal delay is a small
 /// pre-sync initial; the gauge value is in place well before the first tick.
 pub fn repeater<P>(
     root: EntityTemplate,
@@ -145,8 +145,8 @@ where
 /// fires the effect on entry; `on_fire` is merged onto it (e.g. a spawn config).
 /// Designed to be the `#Inner` slot of [`invoked`] for abilities with no volley.
 /// `root` is the ability root, threaded as `InvokedBy(root)` so the effect's
-/// invoker resolves up to the caller (spawn position / targeting) rather than
-/// stopping at this state entity.
+/// invoker resolves up past this state entity to the caller (spawn position /
+/// targeting).
 pub fn single_shot<B>(root: EntityTemplate, on_fire: impl Scene) -> impl Scene
 where
     B: SpatialBackend + Clone + Unpin,

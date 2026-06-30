@@ -49,11 +49,11 @@ fn pae_exit_system(
     mut attributes: AttributesMut,
 ) {
     for entity in removed.read() {
-        // Only act when exiting the ActiveState, not any other PAE state.
-        // The parent of a PAE ActiveState (via SubstateOf) is the PAE
-        // container, which carries EffectTarget and ActivatedModifiers.
-        // Single-parent-hop works for both top-level PAE (parent = chart
-        // root / container) and nested PAE (parent = intermediate container).
+        // Act only on ActiveState exit. A PAE ActiveState's SubstateOf parent
+        // is the PAE container, which carries EffectTarget and
+        // ActivatedModifiers. One parent hop reaches the container for both
+        // top-level PAE (parent = chart root) and nested PAE (parent =
+        // intermediate container).
         let Ok(parent) = q_active_state.get(entity) else {
             continue;
         };
@@ -75,9 +75,9 @@ fn pae_enter_system(
     q_effect_target: Query<&EffectTarget>,
     mut attributes: AttributesMut,
 ) {
-    // See comment in pae_exit_system: the PAE container is the direct
-    // SubstateOf parent of an ActiveState, regardless of whether the PAE
-    // is top-level or nested inside a larger chart.
+    // See pae_exit_system: the PAE container is the direct SubstateOf parent
+    // of an ActiveState, whether the PAE is top-level or nested in a larger
+    // chart.
     for (_active_state, parent) in &q_newly_active {
         let container = parent.0;
         if let Ok(effect_target) = q_effect_target.get(container) {
@@ -89,8 +89,8 @@ fn pae_enter_system(
 }
 
 // ---------------------------------------------------------------------------
-// EffectTarget observers (these are fine as observers - they react to
-// component Add/Remove, not state machine transitions)
+// EffectTarget observers: react to component Add/Remove, not state machine
+// transitions.
 // ---------------------------------------------------------------------------
 
 fn on_add_effect_target(

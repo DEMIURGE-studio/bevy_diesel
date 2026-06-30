@@ -28,7 +28,7 @@ pub struct AttributeModifiers(pub ModifierSet);
 /// [`SustainedTarget`] so it can be removed later even if the targeting
 /// context has changed.
 ///
-/// Defaults to `TargetType::Invoker` — equipment buffs the player.
+/// Defaults to `TargetType::Invoker`: equipment buffs the player.
 #[derive(Component, Clone, Debug)]
 pub struct SustainedModifierConfig<B: SpatialBackend> {
     pub generator: TargetGenerator<B>,
@@ -47,7 +47,7 @@ impl<B: SpatialBackend> SustainedModifierConfig<B> {
         Self { generator }
     }
 
-    /// Target the invoker entity directly (default — equipment buffs).
+    /// Target the invoker entity directly (default: equipment buffs).
     pub fn invoker() -> Self {
         Self::default()
     }
@@ -60,8 +60,8 @@ impl<B: SpatialBackend> SustainedModifierConfig<B> {
 
 /// Inserted by [`sustained_modifier_apply`] when modifiers are applied.
 /// Stores the resolved target entity so [`sustained_modifier_remove`] can
-/// find it on deactivation — the original targeting context may have changed
-/// by then.
+/// find it on deactivation, when the original targeting context may have
+/// changed.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SustainedTarget(pub Entity);
 
@@ -104,10 +104,10 @@ pub fn sustained_modifier_apply<B: SpatialBackend>(
             invoker_target,
         );
 
-        // Apply to the first resolved entity target. Sustained modifiers
-        // are single-target by nature (you can't "un-apply from N entities"
-        // without tracking all of them). If a multi-target sustained effect
-        // is needed later, SustainedTarget becomes a Vec.
+        // Apply to the first resolved entity target. Sustained modifiers are
+        // single-target: un-applying from N entities requires tracking all of
+        // them. For a multi-target sustained effect, SustainedTarget becomes a
+        // Vec.
         let target_count = targets.len();
         if let Some(target) = targets.into_iter().find_map(|(t, _)| t.entity) {
             modifiers.apply(target, &mut attributes);

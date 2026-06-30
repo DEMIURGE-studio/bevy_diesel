@@ -17,13 +17,13 @@ use crate::invoker::InvokedBy;
 use crate::pipeline::generate_targets;
 use crate::target::{InvokerTarget, Target, TargetGenerator, TargetType};
 
-/// Walk the `InvokedBy` chain and return the first ancestor with `Ability` — the
+/// Walk the `InvokedBy` chain and return the first ancestor with `Ability`: the
 /// spell that owns `entity`.
 ///
-/// This resolves at *any* spawn depth because `spawn_system` preserves the
-/// `InvokedBy` chain: a spawned entity's root points at its owning ability (not
-/// collapsed to the invoker/player), so the walk climbs projectile → spell, or
-/// pulse → zone → spell, before reaching the player.
+/// Resolves at any spawn depth because `spawn_system` preserves the `InvokedBy`
+/// chain: a spawned entity's root points at its owning ability, so the walk
+/// climbs projectile -> spell, or pulse -> zone -> spell, before reaching the
+/// player.
 pub(crate) fn find_ability(
     entity: Entity,
     q_invoker: &Query<&InvokedBy>,
@@ -45,15 +45,15 @@ pub(crate) fn find_ability(
 // TemplateRegistry
 // ---------------------------------------------------------------------------
 
-/// A factory that produces a fresh [`Scene`] each time it's called. Stored in the
-/// [`TemplateRegistry`]; a scene is consumed on resolve, so we keep a factory
-/// rather than a single scene instance.
+/// Produces a fresh [`Scene`] on each call. Stored in the [`TemplateRegistry`];
+/// a scene is consumed on resolve, so the registry holds a factory, not a single
+/// scene instance.
 pub type SceneFactory = Box<dyn Fn() -> Box<dyn Scene> + Send + Sync>;
 
 /// Maps string IDs to BSN [`Scene`] factories.
 ///
-/// Callers choose how to instantiate: [`TemplateRegistry::spawn`] for a fresh
-/// entity (e.g. equipping an ability) or [`TemplateRegistry::apply`] to patch an
+/// Two instantiation paths: [`TemplateRegistry::spawn`] for a fresh entity
+/// (e.g. equipping an ability), or [`TemplateRegistry::apply`] to patch an
 /// already-spawned entity (the diesel runtime spawn path, which pre-positions
 /// the entity first).
 #[derive(Resource, Default)]
@@ -113,8 +113,8 @@ pub struct SpawnConfig<B: SpatialBackend> {
     _phantom: PhantomData<B>,
 }
 
-// Manual (not derived) so it doesn't require `B: Default` — `B` is a backend
-// marker. `Default` makes `SpawnConfig` usable as a bare bsn component / via its
+// Manual, not derived, to avoid a `B: Default` bound: `B` is a backend marker.
+// `Default` makes `SpawnConfig` usable as a bare bsn component or via its
 // constructors (`SpawnConfig::passed(...)`) without a `template(...)` wrapper.
 impl<B: SpatialBackend> Default for SpawnConfig<B> {
     fn default() -> Self {
@@ -350,24 +350,24 @@ pub fn spawn_system<B: SpatialBackend>(
             }
         };
         let Ok(spawn_config) = q_effect.get(effect_entity) else {
-            diesel_debug!("[diesel] spawn_system: GoOff for {:?} — no SpawnConfig, skipping", effect_entity);
+            diesel_debug!("[diesel] spawn_system: GoOff for {:?}: no SpawnConfig, skipping", effect_entity);
             continue;
         };
         let root = crate::invoker::resolve_root(&q_substate_of, effect_entity);
 
         // Preserve the `InvokedBy` chain through the spawn boundary: point the
-        // spawned entity at the ability that owns this effect (the spell), not
-        // collapsed to the invoker. That keeps the chain intact so `@ability`
-        // resolves to the spell at *any* spawn depth (projectile → spell, or
-        // pulse → zone → spell), while `@invoker` still climbs to the player via
-        // `root_ancestor`. Effects with no owning ability fall back to the invoker.
+        // spawned entity at the ability that owns this effect (the spell). That
+        // keeps the chain intact so `@ability` resolves to the spell at any
+        // spawn depth (projectile -> spell, or pulse -> zone -> spell), while
+        // `@invoker` climbs to the player via `root_ancestor`. Effects with no
+        // owning ability fall back to the invoker.
         let owning_ability = find_ability(effect_entity, &q_invoker, &q_ability);
         let spawn_parent = owning_ability.unwrap_or(invoker);
 
         diesel_debug!("[diesel] spawn_system: received GoOff for {:?}, template='{}', invoker={:?}",
             effect_entity, spawn_config.template_id, invoker);
 
-        // Keep per-spawn scope; used for `inherit_scope` injection below.
+        // Keep per-spawn scope for `inherit_scope` injection below.
         let spawn_targets: Vec<(Target<B::Pos>, crate::target::Scope)> = generate_targets::<B>(
             &spawn_config.spawn_position_generator,
             &mut ctx,
@@ -379,7 +379,7 @@ pub fn spawn_system<B: SpatialBackend>(
         );
 
         if spawn_targets.is_empty() {
-            diesel_debug!("[diesel]   spawn_targets EMPTY — skipping! invoker={:?} invoker_target={:?}", invoker, invoker_target);
+            diesel_debug!("[diesel]   spawn_targets EMPTY, skipping! invoker={:?} invoker_target={:?}", invoker, invoker_target);
             continue;
         }
         diesel_debug!("[diesel]   spawn_targets count: {}, positions: {:?}", spawn_targets.len(), spawn_targets.iter().map(|(t, _)| t.position).collect::<Vec<_>>());
@@ -397,7 +397,7 @@ pub fn spawn_system<B: SpatialBackend>(
                 &mut ctx,
             );
             if targets.is_empty() {
-                diesel_debug!("[diesel]   target_targets EMPTY — skipping!");
+                diesel_debug!("[diesel]   target_targets EMPTY, skipping!");
                 continue;
             }
             Some(targets)
@@ -447,16 +447,16 @@ pub fn spawn_system<B: SpatialBackend>(
             }
 
             // Register gauge sources for cross-entity attribute expressions.
-            // The aliases are stored in the DependencyGraph immediately; when
-            // Attributes + modifiers are applied later (during command flush),
-            // expressions like "Damage@root" or "Cooldown@ability" will resolve.
+            // Aliases land in the DependencyGraph immediately; when Attributes +
+            // modifiers apply later (during command flush), expressions like
+            // "Damage@root" or "Cooldown@ability" resolve.
             attributes.register_source(spawned_entity, "root", root);
             if let Some(ability) = owning_ability {
                 attributes.register_source(spawned_entity, "ability", ability);
             }
 
-            // Inherit scope as base attributes (suffix stripped).
-            // Runs after template_fn so scope wins on collision.
+            // Inherit scope as base attributes (suffix stripped). Runs after
+            // template application so scope wins on collision.
             if spawn_config.inherit_scope {
                 for (key, val) in go_off.scope.iter().chain(spawn_scope.iter()) {
                     let attr_name = key.split('@').next().unwrap_or(key);

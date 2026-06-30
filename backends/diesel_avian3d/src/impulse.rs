@@ -3,18 +3,18 @@ use bevy::prelude::*;
 use bevy_diesel::effect::GoOff;
 
 // ---------------------------------------------------------------------------
-// ImpulseEffect — apply physics impulse to targets on GoOff
+// ImpulseEffect: apply physics impulse to targets on GoOff
 // ---------------------------------------------------------------------------
 
-/// Sub-effect that applies a linear impulse to target entities, pushing them
-/// away from the effect entity's position. Use as a sub-effect alongside
-/// instant damage for knockback, explosions, etc.
+/// Applies a linear impulse to target entities, pushing them away from the
+/// effect entity's position. Use as a sub-effect alongside instant damage for
+/// knockback, explosions, etc.
 ///
-/// For angular flinch, set `angular` to a non-zero value — a random-direction
-/// angular impulse is applied to make targets wobble on hit.
+/// A non-zero `angular` applies a random-direction angular impulse so targets
+/// wobble on hit.
 #[derive(Component, Clone, Debug, Default)]
 pub struct ImpulseEffect {
-    /// Linear impulse magnitude (direction: away from effect source).
+    /// Linear impulse magnitude, directed away from the effect source.
     pub force: f32,
     /// Upward component added to the impulse direction.
     pub vertical: f32,
@@ -24,7 +24,7 @@ pub struct ImpulseEffect {
 
 impl ImpulseEffect {
     /// Full builder: linear `force`, `vertical` lift, and `angular` flinch.
-    /// Reads cleanly as a bare bsn component: `ImpulseEffect::new(8.0, 3.0, 5.0)`.
+    /// Reads as a bare bsn component: `ImpulseEffect::new(8.0, 3.0, 5.0)`.
     pub fn new(force: f32, vertical: f32, angular: f32) -> Self {
         Self {
             force,
@@ -52,7 +52,7 @@ impl ImpulseEffect {
     }
 }
 
-/// System that reads `GoOff` messages and applies impulses to target entities.
+/// Reads `GoOff` messages and applies impulses to target entities.
 /// Runs in `DieselSet::Effects`.
 pub fn impulse_effect_system(
     mut reader: MessageReader<GoOff<Vec3>>,
@@ -72,7 +72,7 @@ pub fn impulse_effect_system(
             continue;
         };
 
-        // Source position: the effect entity itself
+        // Source position: the effect entity's root ancestor
         let source = q_child_of.root_ancestor(effect_entity);
         let source_pos = q_transform
             .get(source)

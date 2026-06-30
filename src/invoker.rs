@@ -49,10 +49,10 @@ pub fn resolve_invoker(q_invoker: &Query<&InvokedBy>, entity: Entity) -> Entity 
 
 /// Walk the `SubstateOf` chain to the state-machine (scene) root entity.
 ///
-/// diesel effects live in gearbox's *state* hierarchy (`SubstateOf`), not the
-/// transform hierarchy (`ChildOf`), so this is how the ability / spawned-scene
-/// root — the entity carrying the `Transform`, used by `TargetType::Root` and
-/// `root_gathering` — is found from any effect/sub-state entity.
+/// diesel effects live in gearbox's *state* hierarchy (`SubstateOf`), so this
+/// finds the ability / spawned-scene root (the entity carrying the `Transform`,
+/// used by `TargetType::Root` and `root_gathering`) from any effect/sub-state
+/// entity.
 pub fn resolve_root(
     q_substate_of: &Query<&bevy_gearbox::SubstateOf>,
     entity: Entity,
@@ -65,7 +65,7 @@ pub fn resolve_root(
 // ---------------------------------------------------------------------------
 
 /// Register gauge sources when `InvokedBy` is added: `@invoker` (the root of the
-/// invoker chain — the player) and `@ability` (the nearest [`Ability`] ancestor —
+/// invoker chain, the player) and `@ability` (the nearest [`Ability`] ancestor,
 /// the spell), so sub-state expressions like `"Cooldown@ability"` resolve.
 pub(crate) fn register_invoker_source(
     add: On<Add, InvokedBy>,

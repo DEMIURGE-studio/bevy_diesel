@@ -22,11 +22,19 @@ impl<T: Clone + Copy + Send + Sync + Default + Debug + TypePath + Reflect + 'sta
 // OnRepeat<P> - emitted by Repeater on each tick
 // ---------------------------------------------------------------------------
 
-/// Emitted by the repeater on each iteration.
+/// Emitted by the repeater on each iteration. A pure "tick" signal carrying
+/// **no target**. A repeater is a clock: each fire's target is the downstream
+/// effect's own concern, re-resolved per tick by its `TargetGenerator`
+/// (`InvokerTarget` / `Root` / a gatherer). Its [`HasDieselTarget`] impl yields an
+/// empty `Target::default()`, so a `TargetType::Passed` effect under a repeater
+/// resolves to an empty target.
 #[derive(Message, Clone, Debug, Reflect)]
 pub struct OnRepeat<P: PosBound> {
     pub entity: Entity,
-    pub target: Target<P>,
+    // Parameterizes `OnRepeat` by the backend position type (for the
+    // per-backend alias and `HasDieselTarget<P>`) while carrying no target.
+    #[reflect(ignore)]
+    _phantom: core::marker::PhantomData<P>,
 }
 
 impl<P: PosBound> GearboxMessage for OnRepeat<P> {
@@ -35,8 +43,8 @@ impl<P: PosBound> GearboxMessage for OnRepeat<P> {
 }
 
 impl<P: PosBound> OnRepeat<P> {
-    pub fn new(entity: Entity, target: Target<P>) -> Self {
-        Self { entity, target }
+    pub fn new(entity: Entity) -> Self {
+        Self { entity, _phantom: core::marker::PhantomData }
     }
 }
 
@@ -94,7 +102,9 @@ pub trait HasDieselTarget<P: PosBound>: GearboxMessage {
 }
 
 impl<P: PosBound> HasDieselTarget<P> for OnRepeat<P> {
-    fn diesel_target(&self) -> Target<P> { self.target }
+    /// A repeater tick contributes no aim. Downstream effects resolve their own
+    /// target each tick; a `Passed` consumer gets an empty target.
+    fn diesel_target(&self) -> Target<P> { Target::default() }
 }
 impl<P: PosBound> HasDieselTarget<P> for StartInvoke<P> {
     fn diesel_target(&self) -> Target<P> { self.target }

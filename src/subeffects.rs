@@ -7,7 +7,7 @@ use crate::effect::SubEffectOf;
 use crate::invoker::InvokedBy;
 
 // ---------------------------------------------------------------------------
-// SpawnDieselSubstate — like gearbox's SpawnSubstate but adds InvokedBy(root)
+// SpawnDieselSubstate: gearbox's SpawnSubstate plus InvokedBy(root)
 // ---------------------------------------------------------------------------
 
 /// Extension trait for spawning diesel substates with automatic `InvokedBy`.
@@ -16,7 +16,7 @@ use crate::invoker::InvokedBy;
 /// invoker. Since diesel templates always call `with_children` on the template
 /// root, all substates get `InvokedBy(root)` automatically.
 #[deprecated(
-    note = "imperative hierarchy authoring is superseded by `bsn!` scenes — author substates as bare `#Name SubstateOf(#Parent) InvokedBy(#Root)` entries (see bevy_diesel::scenes and the BSN examples)"
+    note = "imperative hierarchy authoring is superseded by `bsn!` scenes: author substates as bare `#Name SubstateOf(#Parent) InvokedBy(#Root)` entries (see bevy_diesel::scenes and the BSN examples)"
 )]
 pub trait SpawnDieselSubstate {
     type Out<'a> where Self: 'a;
@@ -58,7 +58,7 @@ impl SpawnDieselSubstate for ChildSpawnerCommands<'_> {
 /// ));
 /// ```
 #[deprecated(
-    note = "imperative hierarchy authoring is superseded by `bsn!` scenes — author sub-effects as bare `SubEffectOf(#State) InvokedBy(#Root)` entries (see bevy_diesel::scenes and the BSN examples)"
+    note = "imperative hierarchy authoring is superseded by `bsn!` scenes: author sub-effects as bare `SubEffectOf(#State) InvokedBy(#Root)` entries (see bevy_diesel::scenes and the BSN examples)"
 )]
 pub trait SpawnSubEffect {
     type Out<'a> where Self: 'a;

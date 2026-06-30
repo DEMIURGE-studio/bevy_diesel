@@ -230,7 +230,7 @@ pub struct TargetMutator<B: SpatialBackend> {
     _phantom: PhantomData<B>,
 }
 
-// Manual so it doesn't require `B: Default` (backend marker). Enables bsn use
+// Manual impl avoids a `B: Default` bound (backend marker). Enables bsn use
 // without a `template(...)` wrapper.
 impl<B: SpatialBackend> Default for TargetMutator<B> {
     fn default() -> Self {
@@ -285,7 +285,7 @@ impl<B: SpatialBackend> TargetMutator<B> {
     }
 
     /// Target the root entity and gather targets around it (e.g. an AoE in
-    /// radius). Single-call so it reads as a bare bsn component:
+    /// radius). Single call, so it reads as a bare bsn component:
     /// `TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(3.0))`.
     pub fn root_gathering(gatherer: B::Gatherer) -> Self {
         Self::root().with_gatherer(gatherer)

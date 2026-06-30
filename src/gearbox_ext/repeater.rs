@@ -4,7 +4,6 @@ use bevy_gauge::AttributeComponent;
 
 use crate::diagnostics::diesel_debug;
 use crate::events::{OnRepeat, PosBound};
-use crate::target::Target as DieselTarget;
 
 // ---------------------------------------------------------------------------
 // Repeater component
@@ -13,11 +12,10 @@ use crate::target::Target as DieselTarget;
 /// Counter-driven repetition. Place on a superstate whose substates should
 /// be re-entered on each cycle.
 ///
-/// Internally the repeater creates an Idle → Apply cycle driven by
-/// [`OnRepeat`]. Each cycle, the repeater system writes `OnRepeat` which
-/// fires the `MessageEdge`, producing `GoOffOrigin` via the normal
-/// `SideEffect` pipeline. When the counter reaches 0, [`Done`] is
-/// written targeting the parent so the parent can transition away.
+/// The repeater drives an Idle -> Apply cycle via [`OnRepeat`]. Each cycle, the
+/// repeater system writes `OnRepeat`, which fires the `MessageEdge` and
+/// produces `GoOffOrigin` through the `SideEffect` pipeline. At count 0,
+/// [`Done`] targets the parent so it can transition away.
 ///
 /// The counter resets when the Repeater gains `Active` (fresh entry from parent).
 #[derive(Component, Clone, Debug, Reflect, Default, AttributeComponent)]
@@ -42,8 +40,8 @@ impl Repeater {
 // Repeater system
 // ---------------------------------------------------------------------------
 
-/// Repeater lifecycle system. Uses `Changed<Active>` with `Ref` to
-/// distinguish initial entry from re-entry via the Apply→Repeater bounce:
+/// Repeater lifecycle system. `Changed<Active>` with `Ref` distinguishes
+/// initial entry from re-entry via the Apply->Repeater bounce:
 ///
 /// - `is_added()` (initial entry): reset counter, write first [`OnRepeat`]
 /// - `!is_added()` (re-entry): decrement, write [`OnRepeat`] if remaining > 0,
@@ -60,20 +58,17 @@ pub fn repeater_tick<P: PosBound>(
             continue;
         };
 
-        let root = q_substate_of.root_ancestor(entity);
-        let target = DieselTarget::entity(root, P::default());
-
         if active_ref.is_added() {
-            // Initial entry — reset counter, decrement, fire first tick
-            // (saturating to avoid a u32 underflow panic when RepeatCount == 0)
+            // Initial entry: reset counter, decrement, fire first tick.
+            // Saturating sub avoids a u32 underflow panic when RepeatCount == 0.
             repeater.remaining = repeater.initial.saturating_sub(1);
-            writer_repeat.write(OnRepeat::new(entity, target));
+            writer_repeat.write(OnRepeat::new(entity));
         } else if repeater.remaining > 0 {
-            // Re-entry via Apply→Repeater bounce — decrement and fire
+            // Re-entry via Apply->Repeater bounce: decrement and fire.
             repeater.remaining -= 1;
-            writer_repeat.write(OnRepeat::new(entity, target));
+            writer_repeat.write(OnRepeat::new(entity));
         } else {
-            // Exhausted — reset for next cycle and emit Done to parent
+            // Exhausted: reset for next cycle and emit Done to parent.
             repeater.remaining = repeater.initial;
             let parent = match q_substate_of.get(entity) {
                 Ok(s) => s.0,

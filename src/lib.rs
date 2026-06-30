@@ -17,8 +17,8 @@ pub mod spawn;
 pub mod subeffects;
 pub mod target;
 
-// Re-export upstream dependencies under clean, prefix-free names (à la `bevy::ecs`).
-// `bevy_diesel::gauge` == the `bevy_gauge` crate; diesel's own integration layer
+// Re-export upstream dependencies under prefix-free names (a la `bevy::ecs`).
+// `bevy_diesel::gauge` == the `bevy_gauge` crate; diesel's integration layer
 // lives in `gauge_ext` / `gearbox_ext`.
 pub use bevy_gauge as gauge;
 pub use bevy_gearbox as gearbox;
@@ -50,9 +50,9 @@ pub enum DieselSet {
 pub mod prelude {
     pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
-    // NOTE: diesel's own aim `Target` is intentionally NOT preluded — the name is
-    // ceded to gearbox's transition `Target` (below), which dominates BSN authoring.
-    // The concrete aim target is exposed by backends as `AbilityTarget`.
+    // diesel's aim `Target` is omitted from the prelude: the name belongs to
+    // gearbox's transition `Target` (below), which dominates BSN authoring.
+    // Backends expose the concrete aim target as `AbilityTarget`.
     pub use crate::target::{
         Scope, InvokerTarget, TargetGenerator, TargetMutator, TargetType,
     };
@@ -76,7 +76,7 @@ pub mod prelude {
     // Surface gearbox's authoring + runtime API flat, so consumers building on
     // diesel never name `bevy_gearbox` directly. (Carries gearbox's `Target`,
     // `Substates`, `Transitions`, `GearboxSchedule`, `TransitionMessage`, etc.)
-    #[allow(deprecated)] // gearbox's prelude still carries its deprecated authoring traits
+    #[allow(deprecated)] // gearbox's prelude carries its deprecated authoring traits
     pub use bevy_gearbox::prelude::*;
     pub use bevy_gearbox::Matched;
     pub use crate::propagation::{

@@ -1,6 +1,6 @@
-// This whole module is the deprecated imperative authoring API; it internally
-// uses the (also deprecated) `SpawnDieselSubstate` trait, so silence those
-// in-module deprecation warnings while the API lives on for downstream callers.
+// Deprecated imperative authoring API. It uses the (also deprecated)
+// `SpawnDieselSubstate` trait, so silence in-module deprecation warnings while
+// the API serves downstream callers.
 #![allow(deprecated)]
 
 use std::time::Duration;
@@ -18,7 +18,7 @@ use crate::backend::SpatialBackend;
 
 /// Convenience builder that wraps a component in a sub-effect node with a
 /// `TargetMutator::invoker()` for target resolution.
-#[deprecated(note = "use `bsn!` scenes — author sub-effects as bare `SubEffectOf(#State)` entries (see bevy_diesel::scenes)")]
+#[deprecated(note = "use `bsn!` scenes: author sub-effects as bare `SubEffectOf(#State)` entries (see bevy_diesel::scenes)")]
 pub fn apply_sub_effect<B: SpatialBackend>(
     effect: impl Component,
 ) -> impl FnOnce(&mut EntityCommands) {
@@ -36,16 +36,16 @@ pub fn apply_sub_effect<B: SpatialBackend>(
 }
 
 // ---------------------------------------------------------------------------
-// template_invoked: Ready → Invoking → Cooldown → Ready
+// template_invoked: Ready -> Invoking -> Cooldown -> Ready
 // ---------------------------------------------------------------------------
 
-/// Outermost ability wrapper. Builds a Ready ↔ Invoking ↔ Cooldown state machine.
-/// `configure_invoking` receives the Invoking entity's `EntityCommands` to attach
-/// sub-machines (repeaters, spawn configs, etc.).
+/// Outermost ability wrapper. Builds a Ready <-> Invoking <-> Cooldown state
+/// machine. `configure_invoking` receives the Invoking entity's
+/// `EntityCommands` to attach sub-machines (repeaters, spawn configs, etc.).
 ///
-/// The Invoking state transitions to Cooldown when it receives a `Done` message
-/// from a child terminal state. For single-shot abilities (no repeater), a
-/// terminal "Done" substate is automatically added with an always-edge.
+/// Invoking transitions to Cooldown on a `Done` message from a child terminal
+/// state. Single-shot abilities (no repeater) get an automatic terminal "Done"
+/// substate with an always-edge.
 #[deprecated(note = "use `bevy_diesel::scenes::invoked` (a `bsn!` Scene) instead")]
 pub fn template_invoked<P: PosBound, F>(
     commands: &mut Commands,
@@ -65,7 +65,6 @@ where
             .spawn_diesel_substate(entity, Name::new("Invoking"))
             .id();
 
-        // Let the caller configure the Invoking node
         let mut invoking_ec = parent.commands_mut().entity(invoking);
         configure_invoking(&mut invoking_ec);
 
@@ -73,13 +72,13 @@ where
             .spawn_diesel_substate(entity, Name::new("Cooldown"))
             .id();
 
-        // Ready → Invoking on StartInvoke
+        // Ready -> Invoking on StartInvoke
         parent.spawn_transition::<StartInvoke<P>>(ready, invoking);
 
-        // Invoking → Cooldown when a child terminal state emits Done
+        // Invoking -> Cooldown when a child terminal state emits Done
         parent.spawn_transition::<Done>(invoking, cooldown_state);
 
-        // Cooldown → Ready after delay
+        // Cooldown -> Ready after delay
         parent
             .spawn_transition_always(cooldown_state, ready)
             .with_delay(cooldown);
@@ -98,12 +97,11 @@ where
 // template_repeater: counted volley inside a parent state
 // ---------------------------------------------------------------------------
 
-/// Builds a Repeater sub-machine inside a parent state. The count is driven
-/// by `count_expr` (e.g. `"ProjectileCount@invoker"`). Each tick calls
-/// `on_tick` on the Fire/Apply node.
+/// Builds a Repeater sub-machine inside a parent state. `count_expr` drives the
+/// count (e.g. `"ProjectileCount@invoker"`). Each tick calls `on_tick` on the
+/// Fire/Apply node.
 ///
-/// When the repeater exhausts its count, it transitions to a `TerminalState`
-/// child which emits `Done` to the parent.
+/// On exhausting its count, the repeater emits `Done` to the parent.
 #[deprecated(note = "use `bevy_diesel::scenes::repeater` (a `bsn!` Scene) instead")]
 pub fn template_repeater<P: PosBound, F>(
     count_expr: &str,
@@ -139,19 +137,18 @@ where
                 .spawn_diesel_substate(repeater, Name::new("Fire"))
                 .id();
 
-            // Configure the Fire node with whatever happens each tick
             let mut fire_ec = parent.commands_mut().entity(fire);
             on_tick(&mut fire_ec);
 
-            // Idle → Fire on each repeat tick
+            // Idle -> Fire on each repeat tick
             parent.spawn_transition::<OnRepeat<P>>(idle, fire);
 
-            // Fire → Repeater (bounce back for next cycle)
+            // Fire -> Repeater, bounce back for the next cycle
             parent
                 .spawn_transition_always(fire, repeater)
                 .with_delay(Duration::from_secs_f32(delay_secs));
 
-            // When exhausted, repeater emits Done directly to its parent (Invoking)
+            // When exhausted, the repeater emits Done directly to its parent (Invoking).
 
             parent
                 .commands_mut()
@@ -171,11 +168,11 @@ where
 // ---------------------------------------------------------------------------
 
 /// Spawns a single terminal child state inside the parent. The child gets the
-/// user's configuration applied, plus `TerminalState` — so entering it
-/// immediately emits `Done` to the parent.
+/// caller's configuration plus `TerminalState`, so entering it immediately
+/// emits `Done` to the parent.
 ///
-/// Use this for one-shot abilities (no repeater). The child becomes the
-/// `InitialState` of the parent.
+/// For one-shot abilities (no repeater). The child becomes the parent's
+/// `InitialState`.
 #[deprecated(note = "use `bevy_diesel::scenes::single_shot` (a `bsn!` Scene) instead")]
 pub fn template_single_shot<B: SpatialBackend, F>(
     on_fire: F,

@@ -74,7 +74,7 @@ impl Plugin for DieselAbilityPoolPlugin {
 
 // ================= PAE Integration Observers =================
 
-/// On enter, register all Ability children with the PAE's target.
+/// Registers all `Ability` children with the PAE's target on enter.
 pub fn emit_register_on_active(
     q_newly_active: Query<&Active, Added<Active>>,
     q_children: Query<&Children>,
@@ -101,7 +101,7 @@ pub fn emit_register_on_active(
     }
 }
 
-/// On exit, unregister all Ability children from the PAE's target.
+/// Unregisters all `Ability` children from the PAE's target on exit.
 pub fn emit_unregister_on_inactive(
     mut removed: RemovedComponents<Active>,
     q_children: Query<&Children>,
@@ -166,7 +166,7 @@ fn handle_unregister_ability(
     }
 }
 
-/// Recursively collect all `Ability` entities under a hierarchy.
+/// Collect all `Ability` entities under a hierarchy.
 pub fn collect_all_abilities(
     entity: Entity,
     q_children: &Query<&Children>,

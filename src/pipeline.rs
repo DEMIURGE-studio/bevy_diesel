@@ -6,7 +6,7 @@ use crate::effect::{GoOff, GoOffOrigin, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::target::{Scope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
-/// Resolve → offset → gather. Returns unfiltered results.
+/// Resolve -> offset -> gather. Returns unfiltered results.
 pub fn generate_targets<B: SpatialBackend>(
     generator: &TargetGenerator<B>,
     ctx: &mut B::Context<'_, '_>,
@@ -54,11 +54,11 @@ pub fn generate_targets<B: SpatialBackend>(
     // Stage 3: Gather
     let mut results = match &generator.gatherer {
         None => {
-            // Identity: return the resolved+offset target with no scope.
+            // Identity: the resolved+offset target with no scope.
             vec![(offset_target, Scope::new())]
         }
         Some(gatherer) => {
-            // Fully delegated to backend; backend attaches per-target scope.
+            // Delegated to backend; it attaches per-target scope.
             B::gather(ctx, offset_target.position, gatherer, invoker)
         }
     };
@@ -73,7 +73,7 @@ pub fn generate_targets<B: SpatialBackend>(
 
 /// Reads [`GoOffOrigin`] messages, walks the [`SubEffects`] tree for each one,
 /// resolves targets at each level, and writes a [`GoOff`] for every
-/// descendant effect entity × target. No recursion — single pass using a stack.
+/// descendant (effect entity, target) pair. Single pass over a stack, no recursion.
 pub fn propagate_system<B: SpatialBackend>(
     mut reader: MessageReader<GoOffOrigin<B::Pos>>,
     mut ctx: B::Context<'_, '_>,
@@ -139,7 +139,7 @@ pub fn propagate_system<B: SpatialBackend>(
 
         while let Some((parent, in_targets)) = stack.pop() {
             let Ok(subs) = q_sub_effects.get(parent) else {
-                diesel_debug!("[diesel]   {:?} has no SubEffects — leaf node", parent);
+                diesel_debug!("[diesel]   {:?} has no SubEffects, leaf node", parent);
                 continue;
             };
 
@@ -186,7 +186,7 @@ pub fn propagate_system<B: SpatialBackend>(
     }
 }
 
-// Keep the old name as an alias for code that references it
+// Alias for callers referencing the name `propagate_observer`.
 pub use propagate_system as propagate_observer;
 
 /// Add `parent_scope` keys to each target's scope; existing keys win.

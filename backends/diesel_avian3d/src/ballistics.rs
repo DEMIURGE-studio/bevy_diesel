@@ -53,7 +53,7 @@ pub fn distance_lock(origin: Vec3, target: Vec3, min: f32, max: f32) -> Vec3 {
     velocity_to_target.clamp_length(min, max) + origin
 }
 
-// ---- internal helpers ----
+// ---- helpers ----
 
 fn decompose_trajectory(origin: Vec3, target: Vec3) -> (Vec2, f32, f32) {
     let planar_origin = origin.xz();

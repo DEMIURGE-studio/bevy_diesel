@@ -30,7 +30,7 @@ impl GearboxMessage for InvocationComplete {
     fn target(&self) -> Entity { self.target }
 }
 
-/// Re-triggers invocation on state entry if still held (`TryInvoke`).
+/// Re-triggers invocation on state entry when still held (`TryInvoke`).
 pub fn check_should_reinvoke_ability(
     q_newly_active: Query<&Active, Added<Active>>,
     mut q_ability: Query<&mut InvokeStatus>,

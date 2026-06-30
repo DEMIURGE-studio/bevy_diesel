@@ -9,7 +9,7 @@ use bevy_diesel::gauge::AttributeResolvable;
 // Re-exports
 
 pub use bevy_diesel;
-// Clean, prefix-free access to the underlying systems (à la `bevy::ecs`):
+// Prefix-free access to the underlying systems (a la `bevy::ecs`):
 // `diesel_avian3d::gauge` == the `bevy_gauge` crate, `::gearbox` == `bevy_gearbox`.
 pub use bevy_diesel::{gauge, gearbox};
 
@@ -54,7 +54,7 @@ pub mod prelude {
     pub type SustainedModifierConfig =
         bevy_diesel::gauge_ext::modifiers::SustainedModifierConfig<crate::AvianBackend>;
 
-    // Vec3-concrete scene helpers — fix the position type so abilities read
+    // Vec3-concrete scene helpers: fix the position type so abilities read
     // `invoked(...)` / `repeater(...)` without a `::<Vec3, _, _>` turbofish. These
     // shadow the generic re-exports glob-imported from `bevy_diesel::prelude`.
 
@@ -155,7 +155,7 @@ pub mod prelude {
 }
 
 // ---------------------------------------------------------------------------
-// AvianContext - backend runtime queries + RNG bundled as a SystemParam
+// AvianContext: backend runtime queries + RNG bundled as a SystemParam
 // ---------------------------------------------------------------------------
 
 #[derive(SystemParam)]
@@ -167,7 +167,7 @@ pub struct AvianContext<'w, 's> {
 }
 
 // ---------------------------------------------------------------------------
-// AvianBackend - SpatialBackend implementation
+// AvianBackend: SpatialBackend implementation
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Default)]
@@ -199,7 +199,7 @@ impl SpatialBackend for AvianBackend {
         exclude: Entity,
     ) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> {
         match gatherer {
-            // Position generators - read embedded count, produce N points
+            // Position generators: read embedded count, produce N points
             AvianGatherer::Sphere { radius, count } => {
                 let n = count.resolve_count(&mut ctx.rng);
                 let total = n as f32;
@@ -281,7 +281,7 @@ impl SpatialBackend for AvianBackend {
                     .collect()
             }
 
-            // Entity gatherers - query avian3d spatial index
+            // Entity gatherers: query avian3d spatial index
             AvianGatherer::EntitiesInSphere(radius)
             | AvianGatherer::EntitiesInCircle(radius)
             | AvianGatherer::AllEntitiesInRadius(radius) => find_entities_in_radius(
@@ -300,7 +300,7 @@ impl SpatialBackend for AvianBackend {
                     &ctx.transforms,
                 );
                 sort_by_distance(&mut targets, &origin);
-                // Rewrite rank now that order is stable.
+                // Rewrite rank once order is stable.
                 let total = targets.len() as f32;
                 for (i, (_, scope)) in targets.iter_mut().enumerate() {
                     scope.retain(|(k, _)| *k != "Rank@scope" && *k != "GatherCount@scope");
@@ -414,7 +414,7 @@ fn apply_vec3_offset(offset: &Vec3Offset, rng: &mut dyn RngCore) -> Vec3 {
 /// Position generators embed count; entity gatherers defer count limiting to filters.
 #[derive(Clone, Debug, AttributeResolvable)]
 pub enum AvianGatherer {
-    // Position generators - produce N random points around origin
+    // Position generators: produce N random points around origin
     Sphere {
         radius: f32,
         count: NumberType,
@@ -435,7 +435,7 @@ pub enum AvianGatherer {
         count: NumberType,
     },
 
-    // Entity gatherers - query avian3d spatial index
+    // Entity gatherers: query avian3d spatial index
     /// All entities in a 3D sphere, unordered.
     EntitiesInSphere(f32),
     /// All entities in an XZ circle, unordered.
@@ -479,7 +479,7 @@ impl Plugin for AvianDieselPlugin {
         // Core diesel infrastructure (gearbox, repeater, despawn, transitions, etc.)
         app.add_plugins(AvianBackend::plugin_core());
 
-        // Register AttributeDerived for concrete AvianBackend types
+        // AttributeDerived for concrete AvianBackend types
         use bevy_diesel::gauge::prelude::AttributesAppExt;
         app.register_attribute_derived::<bevy_diesel::spawn::SpawnConfig<AvianBackend>>();
         app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
@@ -502,8 +502,8 @@ impl Plugin for AvianDieselPlugin {
             impulse::impulse_effect_system,
         ).in_set(bevy_diesel::DieselSet::Effects));
 
-        // Sustained modifier apply — monomorphized here because the generic
-        // fn needs B::Context which can only resolve with a concrete backend.
+        // Sustained modifier apply, monomorphized here because the generic
+        // fn needs B::Context which only resolves with a concrete backend.
         app.add_systems(
             Update,
             bevy_diesel::gauge_ext::modifiers::sustained_modifier_apply::<AvianBackend>
@@ -513,7 +513,7 @@ impl Plugin for AvianDieselPlugin {
         // Avian3d-specific actions
         app.add_plugins((projectile::ProjectilePlugin, velocity::VelocityEffectPlugin));
 
-        // Collision types + system (unfiltered - entities with Collides marker)
+        // Collision types + system (unfiltered: entities with Collides marker)
         app.register_transition::<collision::CollidedEntity>();
         app.register_transition::<collision::CollidedPosition>();
         app.add_systems(bevy_diesel::gearbox::GearboxSchedule, (
@@ -577,7 +577,7 @@ fn find_entities_in_radius(
 }
 
 // ---------------------------------------------------------------------------
-// RNG - SplitMix64 for fast, lightweight randomness
+// RNG: SplitMix64 for fast, lightweight randomness
 // ---------------------------------------------------------------------------
 
 /// SplitMix64 RNG, stored as a `Local` in `AvianContext`.
@@ -585,7 +585,7 @@ struct SplitMix64(u64);
 
 impl Default for SplitMix64 {
     fn default() -> Self {
-        // Seed from a non-zero constant; Local persists across observer calls
+        // Non-zero seed constant; Local persists across observer calls
         Self(0xdeadbeefcafe1234)
     }
 }
@@ -648,7 +648,7 @@ fn random_in_circle(rng: &mut dyn RngCore, radius: f32) -> Vec2 {
 }
 
 // ---------------------------------------------------------------------------
-// NumberType - count: fixed, random range, or unlimited
+// NumberType: count as fixed, random range, or unlimited
 // ---------------------------------------------------------------------------
 
 /// Count specification: fixed, random range, or all (no limit).

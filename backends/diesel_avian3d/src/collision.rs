@@ -131,12 +131,12 @@ pub trait CollisionFilter: Component + Clone + Debug + Send + Sync + 'static {
     ) -> bool;
 }
 
-/// Marker: every collision fires an event, no filtering.
+/// Marker: every collision fires an event, unfiltered.
 #[derive(Component, Clone, Debug, Default)]
 pub struct Collides;
 
 // ---------------------------------------------------------------------------
-// Unfiltered collision system - fires for any entity with `Collides` marker
+// Unfiltered collision system: fires for any entity with `Collides` marker
 // ---------------------------------------------------------------------------
 
 pub(crate) fn plugin(app: &mut App) {
@@ -210,7 +210,7 @@ fn emit_position_if(
 }
 
 // ---------------------------------------------------------------------------
-// Filtered collision system - generic over CollisionFilter
+// Filtered collision system: generic over CollisionFilter
 // ---------------------------------------------------------------------------
 
 /// Adds filtered collision handling for a `CollisionFilter` implementation.

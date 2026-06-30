@@ -34,7 +34,7 @@ pub trait SpatialBackend: Send + Sync + 'static {
     /// Offset type (e.g. `Vec3Offset`, `GridOffset`)
     type Offset: Clone + Send + Sync + Default + Debug + 'static;
 
-    /// Gatherer type (e.g. `AvianGatherer`). No Default bound - wrapped in `Option`.
+    /// Gatherer type (e.g. `AvianGatherer`). No Default bound; wrapped in `Option`.
     type Gatherer: Clone + Send + Sync + Debug + 'static;
 
     /// Post-gather filter type (e.g. `AvianFilter`)
@@ -101,7 +101,7 @@ pub trait SpatialBackend: Send + Sync + 'static {
 }
 
 // ---------------------------------------------------------------------------
-// DieselCorePlugin<B> - registers all generic diesel infrastructure
+// DieselCorePlugin<B> - registers generic diesel infrastructure
 // ---------------------------------------------------------------------------
 
 /// Registers generic diesel infrastructure for a `SpatialBackend`.
@@ -146,7 +146,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.init_resource::<crate::spawn::TemplateRegistry>();
 
 
-        // Repeater (Idle→Apply cycle driven by OnRepeat)
+        // Repeater (Idle->Apply cycle driven by OnRepeat)
         app.add_systems(
             Update,
             repeater::repeater_tick::<B::Pos>.after(bevy_gearbox::GearboxSet),
@@ -202,7 +202,7 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         // Ability pool (RegisterAbility / UnregisterAbility observers)
         app.add_plugins(crate::ability_pool::DieselAbilityPoolPlugin);
 
-        // Invoker → gauge source auto-registration (also registers `@ability`)
+        // Invoker -> gauge source auto-registration (also registers `@ability`)
         app.add_observer(crate::invoker::register_invoker_source);
         app.add_systems(Update, crate::invoker::on_invoker_changed_system);
 
