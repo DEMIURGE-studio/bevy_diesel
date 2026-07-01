@@ -1,6 +1,6 @@
 [package]
 name = "diesel_avian3d"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Avian3d spatial backend for bevy_diesel"
 license = "MIT OR Apache-2.0"
@@ -10,11 +10,8 @@ keywords = ["bevy", "avian", "physics", "gamedev"]
 categories = ["game-development", "game-engines"]
 
 [dependencies]
-bevy_diesel = { path = "../.." }
-# The avian backend owns gauge's `avian3d` feature, so downstream apps don't have
-# to depend on bevy_gauge just to turn it on. Items are reached via `crate::gauge`
-# (re-exported from bevy_diesel) rather than this direct dep.
-bevy_gauge = { path = "../../../bevy_gauge", features = ["avian3d"] }
+bevy_diesel = "0.4"
+bevy_gauge = { version = "0.5", features = ["avian3d"] }
 bevy = "0.19.0"
 avian3d = "0.7"
 rand = "0.9"
