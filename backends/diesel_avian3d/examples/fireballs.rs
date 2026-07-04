@@ -12,17 +12,15 @@
 //!
 //! Left click: fireball at cursor | Right click: firestorm at cursor
 
-use std::time::Duration;
-
 use avian3d::prelude::*;
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use diesel_avian3d::bevy_diesel::bevy_gauge::{attributes, instant};
+use diesel_avian3d::bevy_diesel::gauge::{attributes, instant};
 // Gearbox state-transition types (the diesel prelude doesn't re-export these).
 // `Target` here is the gearbox transition target; the diesel position-target is
 // aliased to `DieselTarget` to avoid the name clash with the prelude glob.
-use diesel_avian3d::bevy_diesel::bevy_gearbox::{Substates, Target, Transitions};
+use diesel_avian3d::bevy_diesel::gearbox::{Substates, Target, Transitions};
 use diesel_avian3d::bevy_diesel::target::Target as DieselTarget;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
@@ -191,7 +189,7 @@ fn explosive_projectile() -> impl Scene {
                 (Target(#Done) AlwaysEdge)
             ],
 
-            #Done template(|_| Ok(StateComponent(DelayedDespawn::now()))),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }
@@ -202,8 +200,8 @@ fn explosive_projectile() -> impl Scene {
 // ---------------------------------------------------------------------------
 
 fn fireball() -> impl Scene {
-    invoked::<Vec3, _, _>("Fireball Ability", Duration::from_millis(800), |root| {
-        single_shot::<AvianBackend>(root, bsn! {
+    invoked("Fireball Ability", 0.8, |root| {
+        single_shot(root, bsn! {
             SpawnConfig::invoker_offset_target(
                 "explosive_projectile",
                 Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 1.5)),
@@ -222,10 +220,10 @@ fn fireball() -> impl Scene {
 /// the zone root, 500ms apart. Wraps the generic `repeater` at `Vec3` so it can
 /// be called bare in `bsn!` (no turbofish in scene-function position).
 fn firestorm_volley(root: bevy::ecs::template::EntityTemplate) -> impl Scene {
-    repeater::<Vec3>(
+    repeater(
         root,
         "3",
-        0.5,
+        "0.5",
         bsn! {
             template(|_| Ok(SpawnConfig::root("explosive_projectile").with_gatherer(
                 AvianGatherer::Circle { radius: 4.0, count: NumberType::Fixed(30) },
@@ -250,7 +248,7 @@ fn firestorm_zone() -> impl Scene {
             // InitialState/Repeater/Substates). On exhaustion it emits `Done` to
             // its parent (#Root), which transitions to #Done above.
             #RepeaterSlot firestorm_volley(#Root),
-            #Done template(|_| Ok(StateComponent(DelayedDespawn::now()))),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }
@@ -260,8 +258,8 @@ fn firestorm_zone() -> impl Scene {
 // ---------------------------------------------------------------------------
 
 fn firestorm() -> impl Scene {
-    invoked::<Vec3, _, _>("Firestorm Ability", Duration::from_millis(1200), |root| {
-        single_shot::<AvianBackend>(root, bsn! {
+    invoked("Firestorm Ability", 1.2, |root| {
+        single_shot(root, bsn! {
             template(|_| Ok(SpawnConfig::passed("firestorm_zone")
                 .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 8.0)))))
         })

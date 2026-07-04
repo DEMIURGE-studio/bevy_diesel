@@ -154,9 +154,8 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.register_type::<repeater::Repeater>();
 
         // Despawn
-        app.add_systems(bevy_gearbox::GearboxSchedule, crate::despawn::queue_despawn_system::<B::Pos>.in_set(crate::DieselSet::Effects));
-        app.add_systems(PostUpdate, crate::despawn::despawn_queue_system);
-        app.register_state_component::<crate::despawn::DelayedDespawn>();
+        app.add_systems(bevy_gearbox::GearboxSchedule, crate::despawn::despawn_effect_system::<B::Pos>.in_set(crate::DieselSet::Effects));
+        app.register_type::<crate::despawn::DespawnEffect>();
 
         // Register transition messages
         app.register_transition::<StartInvoke<B::Pos>>();

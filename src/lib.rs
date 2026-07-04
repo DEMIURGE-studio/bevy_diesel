@@ -87,7 +87,7 @@ pub mod prelude {
     #[allow(deprecated)]
     pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};
     pub use crate::submit_propagation_for;
-    pub use crate::despawn::{QueueDespawn, DelayedDespawn};
+    pub use crate::despawn::DespawnEffect;
     pub use crate::invoke::{Ability, InvokeStatus, InvocationComplete, check_should_reinvoke_ability};
     pub use crate::ability_pool::{
         AvailableAbilities, AvailableAbility, RegisterAbility, UnregisterAbility,
