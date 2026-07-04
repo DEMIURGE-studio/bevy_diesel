@@ -5,8 +5,8 @@ use bevy_gauge::prelude::*;
 use bevy_gearbox::prelude::*;
 
 use state_machine::{
-    ActivatedModifiers, ActiveState, AppliedModifiers, EffectTarget, PAESuspend,
-    PersistentAttributeEffect, RequirementsOf, RequiresStatsOf,
+    ActivatedModifiers, ActiveState, EffectTarget, PAESuspend,
+    PersistentAttributeEffect, RequiresStatsOf,
 };
 
 pub use state_machine::{PaeEntities, pae_state, pae_state_machine};

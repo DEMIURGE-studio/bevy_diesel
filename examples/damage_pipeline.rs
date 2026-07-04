@@ -11,7 +11,6 @@
 //! you define the events, defense formulas, and resolution logic.
 
 use bevy::{ecs::event::SetEntityEventTarget, prelude::*};
-use bevy_diesel::prelude::*;
 use bevy_diesel::submit_propagation_for;
 
 // ============================================================================

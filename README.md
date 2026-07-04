@@ -1,6 +1,6 @@
 # bevy_diesel
 
-A data-driven ability engine for Bevy. Analogous to UE5's Gameplay Ability System (GAS), but designed around Bevy's ECS.
+A data-driven ability engine for Bevy. Inspired by UE5's Gameplay Ability System (GAS), designed around Bevy's ECS.
 
 Diesel lets you build abilities by composing reusable templates. A fireball ability spawns an explosive projectile, which spawns an explosion on hit, which deals damage in a radius - each piece is a small, self-contained template that references others by name. The same explosion template works whether it came from a fireball, a firestorm, or a landmine.
 
@@ -17,7 +17,7 @@ Diesel makes it easy to:
 
 ## How it works
 
-Diesel is a monorepo containing two companion crates:
+Diesel builds on two companion crates:
 
 - **bevy_gearbox** provides hierarchical state machines (statecharts) with message-driven transitions, guards, parallel regions, and history. Abilities use these for their lifecycle - ready, invoking, repeating, done. Gearbox uses a schedule-based resolution engine that runs state machines in parallel.
 - **bevy_gauge** provides a dependency-graph attribute system with modifiers, expressions, and cross-entity references. Abilities use these for stat requirements, damage formulas, and resource tracking (like projectile life).
@@ -29,6 +29,8 @@ Diesel's core is generic over spatial representation - it doesn't know about `Ve
 ## Quick start
 
 ```rust
+use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
 
 fn main() {
@@ -40,48 +42,83 @@ fn main() {
         .run();
 }
 
+// Templates are scene factories - `fn() -> impl Scene` - registered by name.
+// Abilities reference the templates they spawn by that same name.
 fn register_templates(mut registry: ResMut<TemplateRegistry>) {
-    registry.register("fireball", fireball_template);
+    registry.register("fireball", || Box::new(fireball()));
+    registry.register("explosive_projectile", || Box::new(explosive_projectile()));
+    registry.register("explosion", || Box::new(explosion()));
 }
 ```
 
 ## Templates
 
-The core authoring pattern is the **template** - a function that builds an entity hierarchy representing an ability, an effect, or a piece of one:
+The core authoring pattern is the **template** - a `fn() -> impl Scene` that builds one piece of an ability as a [`bsn!`](https://docs.rs/bevy/latest/bevy/scene/) scene: an ability shell, a projectile, an effect. Templates reference each other by name, so the same explosion works whether it came from a fireball, a firestorm, or a landmine.
+
+An **ability** is an `invoked` shell (Ready -> Invoking -> Cooldown) whose Invoking phase fires an effect - here a `single_shot` that spawns a projectile at the invoker, aimed at their target:
 
 ```rust
-fn fireball_template(commands: &mut Commands, entity: Option<Entity>) -> Entity {
-    let entity = entity.unwrap_or_else(|| commands.spawn_empty().id());
-
-    commands.entity(entity).with_children(|parent| {
-        let ready = parent.spawn_substate(entity, (Name::new("Ready"),)).id();
-        let invoke = parent.spawn_substate(entity, (Name::new("Invoke"),)).id();
-
-        // On invoke, spawn a projectile at the invoker aimed at their target
-        parent.spawn((
-            SubstateOf(invoke),
-            SubEffectOf(invoke),
-            InvokedBy(entity),
-            SpawnConfig::at_invoker("explosive_projectile")
-                .with_target_generator(TargetGenerator::at_invoker_target()),
-        ));
-
-        // State machine wiring
-        parent.spawn_transition::<StartInvoke>(ready, invoke);
-        parent.spawn_transition_always(invoke, ready);
-
-        parent.commands_mut().entity(entity).insert((
-            Ability,
-            StateMachine::new(),
-            InitialState(ready),
-        ));
-    });
-
-    entity
+fn fireball() -> impl Scene {
+    invoked("Fireball", 0.8, |root| {
+        single_shot(root, bsn! {
+            SpawnConfig::invoker_offset_target(
+                "explosive_projectile",
+                Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 1.5)),
+                TargetGenerator::at_invoker_target(),
+            )
+        })
+    })
 }
 ```
 
-Templates reference other templates by name via `SpawnConfig`. The explosive projectile template references an explosion template. The firestorm ability template references the explosive projectile template. Composition all the way down.
+The **projectile** is its own small state chart. It flies until it collides, spawns an `explosion` at the impact point, then despawns. Effects attach to a state with `SubEffectOf(#State) InvokedBy(#Root)`; a terminal `#Done` state carrying `GoOffConfig::root() DespawnEffect` tears the projectile down - `DespawnEffect` is just another effect, despawning whatever the pipeline resolves as its target (here the root):
+
+```rust
+fn explosive_projectile() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("ExplosiveProjectile")
+            ProjectileEffect::new(20.0)
+            StateMachine InitialState(#Flying)
+        Substates [
+            #Flying Transitions [
+                (Target(#Hit) MessageEdge::<CollidedEntity>::default())
+            ],
+            #Hit Substates [
+                (SubEffectOf(#Hit) InvokedBy(#Root) SpawnConfig::passed("explosion"))
+            ] Transitions [
+                (Target(#Done) AlwaysEdge)
+            ],
+            #Done GoOffConfig::root() DespawnEffect,
+        ]
+    }
+}
+```
+
+The **explosion** gathers targets and applies an effect. `GoOffConfig::default()` fires the effect pipeline when the state activates; `TargetMutator::root_gathering` rewrites the single entry-target into "every entity within radius". The gather radius is gauge-driven, so upgrading `Area` scales every explosion the ability ever spawns:
+
+```rust
+fn explosion() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("Explosion")
+            StateMachine InitialState(#Active)
+        Substates [
+            #Active GoOffConfig::default() Substates [
+                #AoE SubEffectOf(#Active) InvokedBy(#Root)
+                    TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(3.0))
+                    template(|_| Ok(attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                Substates [
+                    (SubEffectOf(#AoE) InvokedBy(#Root)
+                        template(|_| Ok(instant! { "Health.current" -= "Damage@ability" })))
+                ],
+            ],
+        ]
+    }
+}
+```
+
+Composition all the way down: `fireball` references `explosive_projectile`, which references `explosion`. Swap the ability's spawn leaf for a `repeater` volley and you have a `firestorm` that drops the same projectiles in waves - the explosion never changes.
 
 ## Examples
 
@@ -91,7 +128,7 @@ See `backends/diesel_avian3d/examples/fireballs.rs` for a complete working examp
 
 | Bevy | Diesel |
 | ---- | ------ |
-| 0.18 | 0.2    |
+| 0.19 | 0.4    |
 
 ## License
 
