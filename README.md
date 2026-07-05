@@ -19,10 +19,10 @@ Diesel makes it easy to:
 
 Diesel builds on two companion crates:
 
-- **bevy_gearbox** provides hierarchical state machines (statecharts) with message-driven transitions, guards, parallel regions, and history. Abilities use these for their lifecycle - ready, invoking, repeating, done. Gearbox uses a schedule-based resolution engine that runs state machines in parallel.
+- **bevy_gearbox** provides hierarchical state machines (statecharts) with message-driven transitions, guards, parallel regions, and history. Diesel uses this to manage ability lifecycle. "on cooldown" is a gearbox state.
 - **bevy_gauge** provides a dependency-graph attribute system with modifiers, expressions, and cross-entity references. Abilities use these for stat requirements, damage formulas, and resource tracking (like projectile life).
 
-Diesel's core is generic over spatial representation - it doesn't know about `Vec3` or physics engines. Instead, you provide (or use) a **spatial backend** that implements the `SpatialBackend` trait, telling diesel how to resolve positions, gather targets, and filter results in your game's coordinate system.
+Diesel's core is generic over spatial representation - it doesn't know about `Vec3` or physics engines. Instead, you use a **spatial backend** that implements the `SpatialBackend` trait, telling diesel how to resolve positions, gather targets, and filter results in your game's coordinate system.
 
 `diesel_avian3d` is the reference backend for 3D games using the Avian physics engine. It provides projectile effects, ballistic math, collision-to-event bridging, and a concrete `Vec3` implementation of the spatial pipeline. Use it directly, or reference it when building your own backend for a different physics engine, a 2D game, or a grid-based system.
 

@@ -80,9 +80,9 @@ pub mod prelude {
     pub use bevy_gearbox::prelude::*;
     pub use bevy_gearbox::Matched;
     pub use crate::propagation::{
-        PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
-        RegisterPropagationTarget, PropagationRegistrar,
-        register_propagation_for, propagate_event,
+        PropagatedMessage, PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
+        RegisterPropagationTarget, PropagationRegistrar, PropagationSet,
+        register_propagation_for, propagate_message,
     };
     #[allow(deprecated)]
     pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};

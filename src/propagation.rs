@@ -1,12 +1,52 @@
-use bevy::{ecs::event::SetEntityEventTarget, prelude::*};
+//! Message-based event propagation.
+//!
+//! A propagated event is a [`Message`] that carries the entity it is addressed
+//! to (via [`PropagatedMessage`]). Diesel forwards it along a per-message-type
+//! subscription graph: when a `T` is written for a source entity, a retargeted
+//! copy is written for every entity subscribed to that source.
+//!
+//! Unlike the earlier observer/`EntityEvent` version, propagation now runs as
+//! ordinary systems inside the schedule, so a multi-stage combat pipeline
+//! (`Attack -> Hit -> Damage -> Killed`) is just a chain of `.chain()`-ordered
+//! systems reading one message type and writing the next. No fixpoint loop is
+//! needed - each stage is a distinct type, so an ordered pass resolves the whole
+//! chain in one frame. (Gearbox needs its loop because transitions produce more
+//! transitions of the *same* type; propagation does not.)
+
+use bevy::prelude::*;
+use bevy_gearbox::resolve::PendingCount;
+use bevy_gearbox::{GearboxPhase, GearboxSchedule};
 use std::marker::PhantomData;
 
-// ================= Propagation =================
+// ================= PropagatedMessage =================
 
+/// A [`Message`] that carries the entity it is addressed to, so propagation can
+/// re-target a copy for each subscriber.
+///
+/// ```ignore
+/// #[derive(Message, Clone, Reflect)]
+/// struct Hit { defender: Entity, amount: f32 }
+///
+/// impl PropagatedMessage for Hit {
+///     fn target(&self) -> Entity { self.defender }
+///     fn set_target(&mut self, e: Entity) { self.defender = e; }
+/// }
+/// ```
+pub trait PropagatedMessage: Message + Clone {
+    /// The entity this message is addressed to.
+    fn target(&self) -> Entity;
+    /// Re-address this message to `entity` (used when forwarding to a subscriber).
+    fn set_target(&mut self, entity: Entity);
+}
+
+// ================= Subscription graph =================
+
+/// Subscribers of an entity's `T` messages. Relationship target of
+/// [`PropagationTargetOf`].
 #[derive(Component, Debug, PartialEq, Eq, Reflect)]
 #[relationship_target(relationship = PropagationTargetOf<T>, linked_spawn)]
 #[reflect(Component, FromWorld)]
-pub struct PropagationTargets<T: EntityEvent> {
+pub struct PropagationTargets<T: Message> {
     #[entities]
     #[relationship]
     entities: Vec<Entity>,
@@ -14,7 +54,7 @@ pub struct PropagationTargets<T: EntityEvent> {
     _pd: PhantomData<T>,
 }
 
-impl<T: EntityEvent> Default for PropagationTargets<T> {
+impl<T: Message> Default for PropagationTargets<T> {
     fn default() -> Self {
         Self {
             entities: Vec::new(),
@@ -23,16 +63,17 @@ impl<T: EntityEvent> Default for PropagationTargets<T> {
     }
 }
 
-impl<T: EntityEvent> PropagationTargets<T> {
+impl<T: Message> PropagationTargets<T> {
     pub fn iter(&self) -> impl Iterator<Item = &Entity> {
         self.entities.iter()
     }
 }
 
+/// Points a subscriber at the source whose `T` messages it receives.
 #[derive(Component, Clone, Debug, Reflect)]
 #[relationship(relationship_target = PropagationTargets<T>)]
 #[reflect(Component, FromWorld, Default)]
-pub struct PropagationTargetOf<T: EntityEvent> {
+pub struct PropagationTargetOf<T: Message> {
     #[entities]
     #[relationship]
     pub entity: Entity,
@@ -40,7 +81,7 @@ pub struct PropagationTargetOf<T: EntityEvent> {
     _pd: PhantomData<T>,
 }
 
-impl<T: EntityEvent> Default for PropagationTargetOf<T> {
+impl<T: Message> Default for PropagationTargetOf<T> {
     fn default() -> Self {
         Self {
             entity: Entity::PLACEHOLDER,
@@ -49,7 +90,7 @@ impl<T: EntityEvent> Default for PropagationTargetOf<T> {
     }
 }
 
-impl<T: EntityEvent> PropagationTargetOf<T> {
+impl<T: Message> PropagationTargetOf<T> {
     pub fn new(entity: Entity) -> Self {
         Self {
             entity,
@@ -58,15 +99,30 @@ impl<T: EntityEvent> PropagationTargetOf<T> {
     }
 }
 
+// ================= Wiring the graph =================
+
+/// Subscribe `target` to `source`'s `T` messages. Trigger it to wire one edge
+/// of the subscription graph at runtime.
 #[derive(EntityEvent, Clone, Debug, Reflect)]
-pub struct RegisterPropagationTarget<T: EntityEvent> {
+pub struct RegisterPropagationTarget<T: Message> {
     #[event_target]
     pub target: Entity,
     pub source: Entity,
+    #[reflect(ignore)]
     _pd: PhantomData<T>,
 }
 
-pub fn register_propagation_target<T: EntityEvent>(
+impl<T: Message> RegisterPropagationTarget<T> {
+    pub fn new(target: Entity, source: Entity) -> Self {
+        Self {
+            target,
+            source,
+            _pd: PhantomData,
+        }
+    }
+}
+
+pub fn register_propagation_target<T: Message>(
     e: On<RegisterPropagationTarget<T>>,
     mut commands: Commands,
 ) {
@@ -75,38 +131,22 @@ pub fn register_propagation_target<T: EntityEvent>(
         .insert(PropagationTargetOf::<T>::new(e.source));
 }
 
-pub fn propagate_event<T: EntityEvent + SetEntityEventTarget + Clone>(
-    event: On<T>,
-    q_targets: Query<&PropagationTargets<T>>,
-    mut commands: Commands,
-) where
-    <T as bevy::prelude::Event>::Trigger<'static>: std::default::Default,
-{
-    let source = event.event_target();
-    let Ok(targets) = q_targets.get(source) else {
-        return;
-    };
-    for &target in targets.entities.iter() {
-        let mut new_event = event.clone();
-        new_event.set_event_target(target);
-        commands.trigger(new_event);
-    }
-}
-
+/// Marker: subscribe this entity to `T` messages emitted on its `ChildOf` root.
+/// The marker is consumed once the subscription is wired.
 #[derive(Component, Clone, Debug, Reflect)]
 #[reflect(Component, Default)]
-pub struct RegisterPropagationTargetRoot<T: EntityEvent> {
+pub struct RegisterPropagationTargetRoot<T: Message> {
     #[reflect(ignore)]
     _pd: PhantomData<T>,
 }
 
-impl<T: EntityEvent> Default for RegisterPropagationTargetRoot<T> {
+impl<T: Message> Default for RegisterPropagationTargetRoot<T> {
     fn default() -> Self {
         Self { _pd: PhantomData }
     }
 }
 
-pub fn register_propagation_target_root<T: EntityEvent>(
+pub fn register_propagation_target_root<T: Message>(
     q_register: Query<Entity, With<RegisterPropagationTargetRoot<T>>>,
     q_child_of: Query<&ChildOf>,
     mut commands: Commands,
@@ -122,7 +162,45 @@ pub fn register_propagation_target_root<T: EntityEvent>(
     }
 }
 
-// ================= Inventory-backed Registration =================
+// ================= Propagation system =================
+
+/// System set holding every `propagate_message::<T>` system, for ordering user
+/// systems relative to propagation.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PropagationSet;
+
+/// Forwards `T` to subscribers: for each `T` addressed to a source that has
+/// [`PropagationTargets`], write a retargeted copy for every subscriber.
+///
+/// The copies are written through [`Commands`] (deferred) rather than a
+/// `MessageWriter<T>`, because a system cannot both read and write the same
+/// message type. A subscriber with no `PropagationTargets<T>` of its own does
+/// not re-propagate, so one-level subscriptions terminate naturally.
+///
+/// Runs inside [`GearboxSchedule`], and bumps [`PendingCount`] for every copy it
+/// forwards. That keeps the gearbox fixpoint loop iterating, so a forwarded copy
+/// is delivered — and consumed by a subscribing state machine's message edge —
+/// within the *same* frame, instead of a frame later.
+pub fn propagate_message<T: PropagatedMessage>(
+    mut reader: MessageReader<T>,
+    q_targets: Query<&PropagationTargets<T>>,
+    mut pending: ResMut<PendingCount>,
+    mut commands: Commands,
+) {
+    for msg in reader.read() {
+        let Ok(targets) = q_targets.get(msg.target()) else {
+            continue;
+        };
+        for &subscriber in targets.iter() {
+            let mut copy = msg.clone();
+            copy.set_target(subscriber);
+            commands.write_message(copy);
+            pending.0 += 1;
+        }
+    }
+}
+
+// ================= Inventory-backed registration =================
 
 pub struct PropagationRegistrar {
     pub register: fn(&mut App),
@@ -130,19 +208,31 @@ pub struct PropagationRegistrar {
 
 inventory::collect!(PropagationRegistrar);
 
-/// Register propagation observers and types for event `T`.
-pub fn register_propagation_for<
-    T: EntityEvent + SetEntityEventTarget + Clone + Reflect + TypePath,
->(
-    app: &mut App,
-) where
-    <T as bevy::prelude::Event>::Trigger<'static>: std::default::Default,
-{
-    app.add_observer(register_propagation_target::<T>)
-        .add_observer(propagate_event::<T>)
+/// Register the message buffer, subscription graph, and propagation system for
+/// message type `T`.
+///
+/// `propagate_message::<T>` is added to [`GearboxSchedule`] (after the gearbox
+/// phases) so it runs inside the fixpoint loop; the subscription-wiring system
+/// stays in [`Update`], where its one-shot latency is irrelevant.
+///
+/// Requires [`GearboxPlugin`](bevy_gearbox::GearboxPlugin) to have been added
+/// first (so `GearboxSchedule` and [`PendingCount`] exist) — `DieselCorePlugin`
+/// guarantees this.
+pub fn register_propagation_for<T: PropagatedMessage + Reflect + TypePath>(app: &mut App) {
+    app.add_message::<T>()
+        .add_observer(register_propagation_target::<T>)
         .register_type::<PropagationTargets<T>>()
         .register_type::<PropagationTargetOf<T>>()
         .add_systems(Update, register_propagation_target_root::<T>);
+
+    app.configure_sets(
+        GearboxSchedule,
+        PropagationSet.after(GearboxPhase::SideEffectPhase),
+    );
+    app.add_systems(
+        GearboxSchedule,
+        propagate_message::<T>.in_set(PropagationSet),
+    );
 }
 
 /// Applies all inventory-submitted propagation registrations.
