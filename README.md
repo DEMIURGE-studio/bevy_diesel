@@ -26,6 +26,17 @@ Diesel's core is generic over spatial representation - it doesn't know about `Ve
 
 `diesel_avian3d` is the reference backend for 3D games using the Avian physics engine. It provides projectile effects, ballistic math, collision-to-event bridging, and a concrete `Vec3` implementation of the spatial pipeline. Use it directly, or reference it when building your own backend for a different physics engine, a 2D game, or a grid-based system.
 
+## What diesel adds over gearbox and gauge
+
+`bevy_gearbox` gives you state machines; `bevy_gauge` gives you an attribute graph. Diesel marries the two to give you behavior - targeting, space, effects, or how the two fit together::
+
+- **A targeting pipeline.** Resolve "the invoker's target", "everything within 5m", or "a random point in a circle" as `TargetType -> offset -> gather -> filter`, generic over a `SpatialBackend` so it isn't tied to `Vec3` or any one physics engine.
+- **An effect pipeline.** Attach effects to a state with `SubEffectOf`; when the state activates, diesel walks the effect tree and delivers each effect - spawn, damage, despawn, impulse - to its resolved target(s). Gearbox transitions *happen*; diesel turns them into *effects on things*.
+- **Composition by name.** Templates are scene factories in a registry, and abilities spawn each other by id (`fireball` -> `explosive_projectile` -> `explosion`), so one explosion is reused everywhere.
+- **The wiring between the two.** Diesel registers the ability hierarchy as gauge sources (`@invoker`, `@ability`, `@root`) so a projectile can read `Damage@ability`; drives gearbox edge delays from gauge (`Cooldown@ability`); gates transitions on gauge requirements; and sequences effect stat-changes *before* guard evaluation, so a hit is visible to an always-edge the same frame.
+
+On top of that come the ability-shaped primitives: cooldowns, repeater volleys, persistent stat effects with requirement-gated activation, and combat-event propagation.
+
 ## Quick start
 
 ```rust
@@ -128,21 +139,21 @@ See `backends/diesel_avian3d/examples/fireballs.rs` for a complete working examp
 
 Authoring abilities uses `bevy_gauge` and `bevy_gearbox` types and derive macros
 directly (`attributes!`, `StateMachine`, `MessageEdge`, `#[derive(AttributeComponent)]`,
-…), so a consuming crate depends on them alongside diesel. Pin the versions in
-the table below so a single copy of each resolves:
+…), so a consuming crate depends on them alongside `bevy_diesel`. Pin the
+versions in the table below so a single copy of each resolves:
 
 ```toml
 [dependencies]
-diesel_avian3d = "0.2"   # or bevy_diesel + your own backend
-bevy_gauge     = "0.5"
-bevy_gearbox   = "0.8"
+bevy_diesel  = "0.4"
+bevy_gauge   = "0.5"
+bevy_gearbox = "0.8"
 ```
 
 ## Version Table
 
-| Bevy | Diesel | diesel_avian3d | bevy_gauge | bevy_gearbox |
-| ---- | ------ | -------------- | ---------- | ------------ |
-| 0.19 | 0.4    | 0.2            | 0.5        | 0.8          |
+| Bevy | Diesel | bevy_gauge | bevy_gearbox |
+| ---- | ------ | ---------- | ------------ |
+| 0.19 | 0.4    | 0.5        | 0.8          |
 
 ## License
 
