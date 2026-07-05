@@ -124,11 +124,25 @@ Composition all the way down: `fireball` references `explosive_projectile`, whic
 
 See `backends/diesel_avian3d/examples/fireballs.rs` for a complete working example with fireball and firestorm abilities built from shared templates - projectile physics, collision handling, gauge-driven projectile life, and team-based collision filtering.
 
+## Dependencies
+
+Authoring abilities uses `bevy_gauge` and `bevy_gearbox` types and derive macros
+directly (`attributes!`, `StateMachine`, `MessageEdge`, `#[derive(AttributeComponent)]`,
+…), so a consuming crate depends on them alongside diesel. Pin the versions in
+the table below so a single copy of each resolves:
+
+```toml
+[dependencies]
+diesel_avian3d = "0.2"   # or bevy_diesel + your own backend
+bevy_gauge     = "0.5"
+bevy_gearbox   = "0.8"
+```
+
 ## Version Table
 
-| Bevy | Diesel |
-| ---- | ------ |
-| 0.19 | 0.4    |
+| Bevy | Diesel | diesel_avian3d | bevy_gauge | bevy_gearbox |
+| ---- | ------ | -------------- | ---------- | ------------ |
+| 0.19 | 0.4    | 0.2            | 0.5        | 0.8          |
 
 ## License
 

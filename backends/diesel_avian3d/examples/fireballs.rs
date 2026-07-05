@@ -16,11 +16,10 @@ use avian3d::prelude::*;
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use diesel_avian3d::bevy_diesel::gauge::{attributes, instant};
-// Gearbox state-transition types (the diesel prelude doesn't re-export these).
-// `Target` here is the gearbox transition target; the diesel position-target is
-// aliased to `DieselTarget` to avoid the name clash with the prelude glob.
-use diesel_avian3d::bevy_diesel::gearbox::{Substates, Target, Transitions};
+use bevy_gauge::{attributes, instant};
+use bevy_gearbox::prelude::*;
+// `Target` (gearbox's transition target) is aliased to `DieselTarget` for
+// diesel's position-target to avoid the name clash.
 use diesel_avian3d::bevy_diesel::target::Target as DieselTarget;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;

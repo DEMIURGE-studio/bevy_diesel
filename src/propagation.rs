@@ -5,13 +5,12 @@
 //! subscription graph: when a `T` is written for a source entity, a retargeted
 //! copy is written for every entity subscribed to that source.
 //!
-//! Unlike the earlier observer/`EntityEvent` version, propagation now runs as
-//! ordinary systems inside the schedule, so a multi-stage combat pipeline
-//! (`Attack -> Hit -> Damage -> Killed`) is just a chain of `.chain()`-ordered
-//! systems reading one message type and writing the next. No fixpoint loop is
-//! needed - each stage is a distinct type, so an ordered pass resolves the whole
-//! chain in one frame. (Gearbox needs its loop because transitions produce more
-//! transitions of the *same* type; propagation does not.)
+//! [`propagate_message`] runs inside [`GearboxSchedule`] and bumps the gearbox
+//! fixpoint loop's work counter for each forwarded copy, so a subscribing state
+//! machine consumes the forwarded message the same frame it is emitted. A
+//! multi-stage user pipeline (`Attack -> Hit -> Damage -> Killed`) is a chain of
+//! `.chain()`-ordered systems, each a distinct message type reading one and
+//! writing the next.
 
 use bevy::prelude::*;
 use bevy_gearbox::resolve::PendingCount;

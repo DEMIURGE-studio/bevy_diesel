@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use bevy_diesel::gauge::prelude::{AttributeDerived, Attributes};
+use bevy_gauge::prelude::{AttributeDerived, Attributes};
 
 use crate::ballistics::calculate_low_angle_velocity_with_speed;
 use crate::prelude::AbilityTarget as Target;

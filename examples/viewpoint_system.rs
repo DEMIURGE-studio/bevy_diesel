@@ -8,20 +8,22 @@
 //!   DA = Defender sees attacker's action       (recipient: defender, GoOff target: attacker)
 //!   DD = Defender sees themselves being hit     (recipient: defender, GoOff target: defender)
 //!
-//! This allows each entity's state machine to independently react to combat events
-//! from their own perspective. For example, a "thorns" PAE subscribes to HitDD
-//! (defender was hit) while a "life steal" PAE subscribes to HitAD (attacker hit defender).
+//! This lets each entity's state machine react to combat events from its own
+//! perspective — a "thorns" effect subscribes to HitDD (defender was hit) while
+//! a "life steal" effect subscribes to HitAD (attacker hit defender).
 //!
 //! This is a PATTERN - copy and adapt it for your event types.
 
-use bevy::{ecs::event::SetEntityEventTarget, prelude::*};
+use bevy::prelude::*;
+use bevy_diesel::prelude::*;
 use bevy_diesel::submit_propagation_for;
+use bevy_gearbox::GearboxPlugin;
 
 // ============================================================================
-// Step 1: Define your base event with attacker/defender roles
+// Step 1: Define your base message with attacker/defender roles
 // ============================================================================
 
-#[derive(Event, Clone, Reflect)]
+#[derive(Message, Clone, Reflect)]
 pub struct Hit {
     pub attacker: Entity,
     pub defender: Entity,
@@ -29,96 +31,59 @@ pub struct Hit {
 }
 
 // ============================================================================
-// Step 2: Define the 4 viewpoint variants
+// Step 2: Define the 4 viewpoint variants (each addressed to a recipient)
 // ============================================================================
 
-/// Delivered to attacker, GoOff targets attacker entity
-#[derive(EntityEvent, Clone, Reflect)]
-pub struct HitAA {
-    #[event_target]
-    pub target: Entity,
-    pub base: Hit,
-}
-impl SetEntityEventTarget for HitAA {
-    fn set_event_target(&mut self, target: Entity) { self.target = target; }
-}
-
-/// Delivered to attacker, GoOff targets defender entity
-#[derive(EntityEvent, Clone, Reflect)]
-pub struct HitAD {
-    #[event_target]
-    pub target: Entity,
-    pub base: Hit,
-}
-impl SetEntityEventTarget for HitAD {
-    fn set_event_target(&mut self, target: Entity) { self.target = target; }
+macro_rules! viewpoint {
+    ($Name:ident) => {
+        #[derive(Message, Clone, Reflect)]
+        pub struct $Name {
+            pub target: Entity,
+            pub base: Hit,
+        }
+        impl PropagatedMessage for $Name {
+            fn target(&self) -> Entity { self.target }
+            fn set_target(&mut self, e: Entity) { self.target = e; }
+        }
+    };
 }
 
-/// Delivered to defender, GoOff targets attacker entity
-#[derive(EntityEvent, Clone, Reflect)]
-pub struct HitDA {
-    #[event_target]
-    pub target: Entity,
-    pub base: Hit,
-}
-impl SetEntityEventTarget for HitDA {
-    fn set_event_target(&mut self, target: Entity) { self.target = target; }
-}
+viewpoint!(HitAA); // delivered to attacker, GoOff targets attacker
+viewpoint!(HitAD); // delivered to attacker, GoOff targets defender
+viewpoint!(HitDA); // delivered to defender, GoOff targets attacker
+viewpoint!(HitDD); // delivered to defender, GoOff targets defender
 
-/// Delivered to defender, GoOff targets defender entity
-#[derive(EntityEvent, Clone, Reflect)]
-pub struct HitDD {
-    #[event_target]
-    pub target: Entity,
-    pub base: Hit,
-}
-impl SetEntityEventTarget for HitDD {
-    fn set_event_target(&mut self, target: Entity) { self.target = target; }
-}
-
-// Register propagation so parent state machines can subscribe
+// Register each variant's buffer + subscription graph.
 submit_propagation_for!(HitAA);
 submit_propagation_for!(HitAD);
 submit_propagation_for!(HitDA);
 submit_propagation_for!(HitDD);
 
 // ============================================================================
-// Step 3: Forwarding observer - splits base event into 4 variants
+// Step 3: Forwarding system - splits the base Hit into the 4 variants
 // ============================================================================
 
-/// Generic forwarder: observes a base event and emits the 4 viewpoint variants.
-/// The `character_filter` query ensures we only deliver to entities that are
-/// actual participants (not projectiles, VFX, etc.).
+/// Reads `Hit` and emits the 4 viewpoint variants. The `CharacterMarker` filter
+/// ensures we only deliver to actual participants (not projectiles, VFX, etc.).
 fn forward_hit_viewpoints(
-    base: On<Hit>,
+    mut reader: MessageReader<Hit>,
     q_character: Query<(), With<CharacterMarker>>,
-    mut commands: Commands,
+    mut aa: MessageWriter<HitAA>,
+    mut ad: MessageWriter<HitAD>,
+    mut da: MessageWriter<HitDA>,
+    mut dd: MessageWriter<HitDD>,
 ) {
-    let attacker = base.attacker;
-    let defender = base.defender;
-    let attacker_is_char = q_character.get(attacker).is_ok();
-    let defender_is_char = q_character.get(defender).is_ok();
+    for base in reader.read() {
+        let (attacker, defender) = (base.attacker, base.defender);
 
-    if attacker_is_char {
-        commands.trigger(HitAA {
-            target: attacker,
-            base: (*base).clone(),
-        });
-        commands.trigger(HitAD {
-            target: attacker,
-            base: (*base).clone(),
-        });
-    }
-
-    if defender_is_char {
-        commands.trigger(HitDA {
-            target: defender,
-            base: (*base).clone(),
-        });
-        commands.trigger(HitDD {
-            target: defender,
-            base: (*base).clone(),
-        });
+        if q_character.get(attacker).is_ok() {
+            aa.write(HitAA { target: attacker, base: base.clone() });
+            ad.write(HitAD { target: attacker, base: base.clone() });
+        }
+        if q_character.get(defender).is_ok() {
+            da.write(HitDA { target: defender, base: base.clone() });
+            dd.write(HitDD { target: defender, base: base.clone() });
+        }
     }
 }
 
@@ -134,24 +99,17 @@ pub struct ThornsEffect {
 #[derive(Component)]
 pub struct CharacterMarker;
 
-fn thorns_on_hit(
-    hit: On<HitDD>,
-    q_thorns: Query<&ThornsEffect>,
-    mut commands: Commands,
-) {
-    let defender = hit.target;
-    let Ok(thorns) = q_thorns.get(defender) else {
-        return;
-    };
-
-    // Reflect damage back to attacker
-    info!(
-        "Thorns: reflecting {:.1} damage back to {:?}",
-        thorns.reflect_damage, hit.base.attacker
-    );
-
-    // You would trigger a Damage event here targeting the attacker
-    let _ = commands; // placeholder
+fn thorns_on_hit(mut reader: MessageReader<HitDD>, q_thorns: Query<&ThornsEffect>) {
+    for hit in reader.read() {
+        let Ok(thorns) = q_thorns.get(hit.target) else {
+            continue;
+        };
+        // You would emit a Damage message here targeting the attacker.
+        info!(
+            "Thorns: reflecting {:.1} damage back to {:?}",
+            thorns.reflect_damage, hit.base.attacker
+        );
+    }
 }
 
 // ============================================================================
@@ -162,16 +120,19 @@ pub struct ViewpointPlugin;
 
 impl Plugin for ViewpointPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(forward_hit_viewpoints)
-            .add_observer(thorns_on_hit);
-
+        app.add_message::<Hit>();
+        // Registers each variant's buffer + `propagate_message::<T>` (in the
+        // gearbox schedule) from the `submit_propagation_for!` submissions.
         bevy_diesel::propagation::plugin(app);
+        app.add_systems(Update, (forward_hit_viewpoints, thorns_on_hit));
     }
 }
 
 fn main() {
     App::new()
         .add_plugins(MinimalPlugins)
+        // Propagation runs inside GearboxSchedule (see damage_pipeline).
+        .add_plugins(GearboxPlugin::default())
         .add_plugins(ViewpointPlugin)
         .run();
 }

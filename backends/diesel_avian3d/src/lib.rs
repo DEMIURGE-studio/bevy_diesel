@@ -4,14 +4,12 @@ use bevy::prelude::*;
 use rand::RngCore;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::gauge::AttributeResolvable;
+use bevy_gauge::AttributeResolvable;
+use bevy_gearbox::RegistrationAppExt;
 
 // Re-exports
 
 pub use bevy_diesel;
-// Prefix-free access to the underlying systems (a la `bevy::ecs`):
-// `diesel_avian3d::gauge` == the `bevy_gauge` crate, `::gearbox` == `bevy_gearbox`.
-pub use bevy_diesel::{gauge, gearbox};
 
 pub mod ballistics;
 pub mod collision;
@@ -75,7 +73,7 @@ pub mod prelude {
     pub fn invoked_with<F, S>(
         name: &'static str,
         cooldown_secs: f32,
-        base: bevy_diesel::gauge::modifier_set::ModifierSet,
+        base: bevy_gauge::modifier_set::ModifierSet,
         make_inner: F,
     ) -> impl bevy::scene::prelude::Scene
     where
@@ -480,13 +478,13 @@ impl Plugin for AvianDieselPlugin {
         app.add_plugins(AvianBackend::plugin_core());
 
         // AttributeDerived for concrete AvianBackend types
-        use bevy_diesel::gauge::prelude::AttributesAppExt;
+        use bevy_gauge::prelude::AttributesAppExt;
         app.register_attribute_derived::<bevy_diesel::spawn::SpawnConfig<AvianBackend>>();
         app.register_attribute_derived::<bevy_diesel::target::TargetMutator<AvianBackend>>();
         app.register_attribute_derived::<projectile::LinearProjectileEffect>();
 
         // Propagation: reads GoOffOrigin, writes GoOff
-        app.add_systems(bevy_diesel::gearbox::GearboxSchedule,
+        app.add_systems(bevy_gearbox::GearboxSchedule,
             (
                 bevy_diesel::effect::go_off_on_entry::<AvianBackend>,
                 propagate_observer::<AvianBackend>,
@@ -496,7 +494,7 @@ impl Plugin for AvianDieselPlugin {
         );
 
         // Leaf effect systems: read GoOff
-        app.add_systems(bevy_diesel::gearbox::GearboxSchedule, (
+        app.add_systems(bevy_gearbox::GearboxSchedule, (
             bevy_diesel::spawn::spawn_system::<AvianBackend>,
             bevy_diesel::print::print_effect::<Vec3>,
             impulse::impulse_effect_system,
@@ -516,11 +514,11 @@ impl Plugin for AvianDieselPlugin {
         // Collision types + system (unfiltered: entities with Collides marker)
         app.register_transition::<collision::CollidedEntity>();
         app.register_transition::<collision::CollidedPosition>();
-        app.add_systems(bevy_diesel::gearbox::GearboxSchedule, (
+        app.add_systems(bevy_gearbox::GearboxSchedule, (
             bevy_diesel::events::go_off_side_effect::<collision::CollidedEntity, Vec3>
-                .in_set(bevy_diesel::gearbox::GearboxPhase::SideEffectPhase),
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
             bevy_diesel::events::go_off_side_effect::<collision::CollidedPosition, Vec3>
-                .in_set(bevy_diesel::gearbox::GearboxPhase::SideEffectPhase),
+                .in_set(bevy_gearbox::GearboxPhase::SideEffectPhase),
         ));
         collision::plugin(app);
     }

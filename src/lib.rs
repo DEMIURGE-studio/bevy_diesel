@@ -17,11 +17,8 @@ pub mod spawn;
 pub mod subeffects;
 pub mod target;
 
-// Re-export upstream dependencies under prefix-free names (a la `bevy::ecs`).
-// `bevy_diesel::gauge` == the `bevy_gauge` crate; diesel's integration layer
-// lives in `gauge_ext` / `gearbox_ext`.
-pub use bevy_gauge as gauge;
-pub use bevy_gearbox as gearbox;
+// `inventory` is re-exported for the `submit_propagation_for!` macro, which
+// expands to `inventory::submit!` in the caller's crate.
 pub use inventory;
 
 /// System sets for ordering diesel's effect pipeline inside [`GearboxSchedule`].
@@ -73,12 +70,6 @@ pub mod prelude {
         apply_sub_effect, template_invoked, template_repeater, template_single_shot,
     };
     pub use crate::scenes::{invoked, invoked_with, repeater, single_shot};
-    // Surface gearbox's authoring + runtime API flat, so consumers building on
-    // diesel never name `bevy_gearbox` directly. (Carries gearbox's `Target`,
-    // `Substates`, `Transitions`, `GearboxSchedule`, `TransitionMessage`, etc.)
-    #[allow(deprecated)] // gearbox's prelude carries its deprecated authoring traits
-    pub use bevy_gearbox::prelude::*;
-    pub use bevy_gearbox::Matched;
     pub use crate::propagation::{
         PropagatedMessage, PropagationTargets, PropagationTargetOf, RegisterPropagationTargetRoot,
         RegisterPropagationTarget, PropagationRegistrar, PropagationSet,

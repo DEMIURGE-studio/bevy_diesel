@@ -4,7 +4,7 @@ use avian3d::prelude::{CollisionLayers, CollisionStart, Collisions, LayerMask, P
 use bevy::prelude::*;
 
 use bevy_diesel::prelude::*;
-use bevy_diesel::gearbox::MessageValidator;
+use bevy_gearbox::{GearboxMessage, MessageValidator};
 use bevy_diesel::events::HasDieselTarget;
 use bevy_diesel::target::Target as DieselTarget;
 

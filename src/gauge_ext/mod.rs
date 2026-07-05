@@ -74,17 +74,4 @@ pub mod prelude {
         },
     };
 
-    pub use bevy_gauge::prelude::{
-        ModifierSet,
-        InstantModifierSet,
-        Attributes,
-        AttributesMut,
-        AttributeRequirements,
-        AttributeResolvable,
-        InstantExt,
-    };
-    pub use bevy_gauge::attributes;
-    pub use bevy_gauge::mod_set;
-    pub use bevy_gauge::instant;
-    pub use bevy_gauge::requires;
 }

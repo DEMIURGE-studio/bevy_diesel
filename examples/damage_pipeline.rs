@@ -19,6 +19,7 @@
 use bevy::prelude::*;
 use bevy_diesel::prelude::*;
 use bevy_diesel::submit_propagation_for;
+use bevy_gearbox::{GearboxPlugin, GearboxSet};
 
 // ============================================================================
 // Step 1: Define your combat messages
@@ -278,7 +279,7 @@ fn main() {
         .add_plugins(bevy::log::LogPlugin::default())
         // Propagation now runs inside GearboxSchedule, so the gearbox plugin
         // must be present. (A real diesel app gets this from DieselCorePlugin.)
-        .add_plugins(bevy_diesel::gearbox::GearboxPlugin::default())
+        .add_plugins(GearboxPlugin::default())
         .add_plugins(DamagePipelinePlugin)
         .init_resource::<FrameCount>()
         .add_systems(First, tick_frame)

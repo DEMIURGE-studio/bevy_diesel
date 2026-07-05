@@ -31,7 +31,7 @@ where
     invoked_with::<P, F, S>(
         name,
         cooldown_secs,
-        crate::gauge::modifier_set::ModifierSet::new(),
+        bevy_gauge::modifier_set::ModifierSet::new(),
         make_inner,
     )
 }
@@ -52,7 +52,7 @@ where
 pub fn invoked_with<P, F, S>(
     name: &'static str,
     cooldown_secs: f32,
-    base: crate::gauge::modifier_set::ModifierSet,
+    base: bevy_gauge::modifier_set::ModifierSet,
     make_inner: F,
 ) -> impl Scene
 where
@@ -65,7 +65,7 @@ where
             Name::new(name)
             template(move |_| {
                 let mut set = base.clone();
-                let has = |set: &crate::gauge::modifier_set::ModifierSet, name: &str| {
+                let has = |set: &bevy_gauge::modifier_set::ModifierSet, name: &str| {
                     set.entries().iter().any(|e| e.attribute.as_str() == name)
                 };
                 if !has(&set, "Cooldown") {
@@ -74,7 +74,7 @@ where
                 if !has(&set, "Damage") {
                     set.add("Damage", 1.0);
                 }
-                Ok(crate::gauge::modifier_set::AttributeInitializer::new(set))
+                Ok(bevy_gauge::modifier_set::AttributeInitializer::new(set))
             })
         Substates [
             #Ready Transitions [
@@ -94,7 +94,7 @@ where
             #Cooldown Transitions [
                 (Target(#Ready) AlwaysEdge Delay::from_secs_f32(cooldown_secs)
                     InvokedBy(#Ability)
-                    template(|_| Ok(crate::gauge::attributes! { "Delay" => "Cooldown@ability" })))
+                    template(|_| Ok(bevy_gauge::attributes! { "Delay" => "Cooldown@ability" })))
             ],
         ]
     }
@@ -124,7 +124,7 @@ where
     bsn! {
         #Repeater InvokedBy(root) InitialState(#Idle)
             Repeater::new(1)
-            template(move |_| Ok(crate::gauge::attributes! { "RepeatCount" => count_expr }))
+            template(move |_| Ok(bevy_gauge::attributes! { "RepeatCount" => count_expr }))
         Substates [
             #Idle Transitions [
                 (Target(#Fire) MessageEdge::<OnRepeat<P>>::default())
@@ -133,7 +133,7 @@ where
             Transitions [
                 (Target(#Repeater) AlwaysEdge Delay::from_secs_f32(0.1)
                     InvokedBy(root)
-                    template(move |_| Ok(crate::gauge::attributes! { "Delay" => interval_expr })))
+                    template(move |_| Ok(bevy_gauge::attributes! { "Delay" => interval_expr })))
             ],
         ]
     }
