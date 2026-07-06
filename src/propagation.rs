@@ -240,16 +240,3 @@ pub fn plugin(app: &mut App) {
         (reg.register)(app);
     }
 }
-
-#[macro_export]
-macro_rules! submit_propagation_for {
-    ($t:ty) => {
-        inventory::submit! {
-            $crate::propagation::PropagationRegistrar {
-                register: |app| {
-                    $crate::propagation::register_propagation_for::<$t>(app);
-                },
-            }
-        }
-    };
-}

@@ -16,7 +16,6 @@
 
 use bevy::prelude::*;
 use bevy_diesel::prelude::*;
-use bevy_diesel::submit_propagation_for;
 use bevy_gearbox::GearboxPlugin;
 
 // ============================================================================
@@ -36,14 +35,11 @@ pub struct Hit {
 
 macro_rules! viewpoint {
     ($Name:ident) => {
-        #[derive(Message, Clone, Reflect)]
+        #[derive(Message, Clone, Reflect, PropagatedMessage)]
         pub struct $Name {
+            #[propagate(target)]
             pub target: Entity,
             pub base: Hit,
-        }
-        impl PropagatedMessage for $Name {
-            fn target(&self) -> Entity { self.target }
-            fn set_target(&mut self, e: Entity) { self.target = e; }
         }
     };
 }
@@ -52,12 +48,6 @@ viewpoint!(HitAA); // delivered to attacker, GoOff targets attacker
 viewpoint!(HitAD); // delivered to attacker, GoOff targets defender
 viewpoint!(HitDA); // delivered to defender, GoOff targets attacker
 viewpoint!(HitDD); // delivered to defender, GoOff targets defender
-
-// Register each variant's buffer + subscription graph.
-submit_propagation_for!(HitAA);
-submit_propagation_for!(HitAD);
-submit_propagation_for!(HitDA);
-submit_propagation_for!(HitDD);
 
 // ============================================================================
 // Step 3: Forwarding system - splits the base Hit into the 4 variants
@@ -122,7 +112,7 @@ impl Plugin for ViewpointPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Hit>();
         // Registers each variant's buffer + `propagate_message::<T>` (in the
-        // gearbox schedule) from the `submit_propagation_for!` submissions.
+        // gearbox schedule) from the `#[derive(PropagatedMessage)]` submissions.
         bevy_diesel::propagation::plugin(app);
         app.add_systems(Update, (forward_hit_viewpoints, thorns_on_hit));
     }

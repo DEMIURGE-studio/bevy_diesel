@@ -1,3 +1,5 @@
+extern crate self as bevy_diesel;
+
 pub(crate) mod diagnostics;
 pub mod ability_pool;
 pub mod backend;
@@ -17,9 +19,12 @@ pub mod spawn;
 pub mod subeffects;
 pub mod target;
 
-// `inventory` is re-exported for the `submit_propagation_for!` macro, which
-// expands to `inventory::submit!` in the caller's crate.
 pub use inventory;
+
+pub use bevy_gauge as gauge;
+pub use bevy_gearbox as gearbox;
+
+pub use bevy_diesel_macros::PropagatedMessage;
 
 /// System sets for ordering diesel's effect pipeline inside [`GearboxSchedule`].
 ///
@@ -45,6 +50,9 @@ pub enum DieselSet {
 }
 
 pub mod prelude {
+    pub use bevy_gauge::prelude::*;
+    pub use bevy_gearbox::prelude::*;
+
     pub use crate::DieselSet;
     pub use crate::backend::{SpatialBackend, DieselCorePlugin};
     // diesel's aim `Target` is omitted from the prelude: the name belongs to
@@ -77,7 +85,7 @@ pub mod prelude {
     };
     #[allow(deprecated)]
     pub use crate::subeffects::{SpawnSubEffect, SpawnDieselSubstate};
-    pub use crate::submit_propagation_for;
+    pub use bevy_diesel_macros::PropagatedMessage;
     pub use crate::despawn::DespawnEffect;
     pub use crate::invoke::{Ability, InvokeStatus, InvocationComplete, check_should_reinvoke_ability};
     pub use crate::ability_pool::{

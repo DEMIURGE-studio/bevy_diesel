@@ -10,6 +10,7 @@ use bevy_gearbox::RegistrationAppExt;
 // Re-exports
 
 pub use bevy_diesel;
+pub use bevy_diesel::{gauge, gearbox};
 
 pub mod ballistics;
 pub mod collision;

@@ -1,0 +1,19 @@
+[package]
+name = "bevy_diesel_macros"
+version = "0.4.0"
+edition = "2021"
+description = "Derive macros for bevy_diesel"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/DEMIURGE-studio/bevy_diesel"
+homepage = "https://github.com/DEMIURGE-studio/bevy_diesel"
+keywords = ["bevy", "macros", "abilities", "gamedev"]
+categories = ["game-development", "development-tools::procedural-macro-helpers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+proc-macro-crate = "3"

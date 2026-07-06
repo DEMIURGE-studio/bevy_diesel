@@ -1,3 +1,4 @@
 [patch.crates-io]
 bevy_diesel = { path = "../.." }
 bevy_gauge = { path = "../../../bevy_gauge" }
+bevy_gearbox = { path = "../../../bevy_gearbox" }

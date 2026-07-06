@@ -28,7 +28,7 @@ Diesel's core is generic over spatial representation - it doesn't know about `Ve
 
 ## What diesel adds over gearbox and gauge
 
-`bevy_gearbox` gives you state machines; `bevy_gauge` gives you an attribute graph. Diesel marries the two to give you behavior - targeting, space, effects, or how the two fit together::
+`bevy_gearbox` gives you state machines; `bevy_gauge` gives you an attribute graph. Neither knows anything about *abilities* - targeting, space, effects, or how the two fit together. Diesel is that layer:
 
 - **A targeting pipeline.** Resolve "the invoker's target", "everything within 5m", or "a random point in a circle" as `TargetType -> offset -> gather -> filter`, generic over a `SpatialBackend` so it isn't tied to `Vec3` or any one physics engine.
 - **An effect pipeline.** Attach effects to a state with `SubEffectOf`; when the state activates, diesel walks the effect tree and delivers each effect - spawn, damage, despawn, impulse - to its resolved target(s). Gearbox transitions *happen*; diesel turns them into *effects on things*.
@@ -137,23 +137,20 @@ See `backends/diesel_avian3d/examples/fireballs.rs` for a complete working examp
 
 ## Dependencies
 
-Authoring abilities uses `bevy_gauge` and `bevy_gearbox` types and derive macros
-directly (`attributes!`, `StateMachine`, `MessageEdge`, `#[derive(AttributeComponent)]`,
-…), so a consuming crate depends on them alongside `bevy_diesel`. Pin the
-versions in the table below so a single copy of each resolves:
 
 ```toml
 [dependencies]
-bevy_diesel  = "0.4"
-bevy_gauge   = "0.5"
-bevy_gearbox = "0.8"
+bevy_diesel = "0.4"
 ```
 
 ## Version Table
 
-| Bevy | Diesel | bevy_gauge | bevy_gearbox |
-| ---- | ------ | ---------- | ------------ |
-| 0.19 | 0.4    | 0.5        | 0.8          |
+| Bevy | Diesel | bundled bevy_gauge | bundled bevy_gearbox |
+| ---- | ------ | ------------------ | -------------------- |
+| 0.19 | 0.4    | 0.5                | 0.8                  |
+
+The gauge/gearbox versions are what `bevy_diesel 0.4` pulls in transitively -
+listed for reference only; you don't declare them.
 
 ## License
 

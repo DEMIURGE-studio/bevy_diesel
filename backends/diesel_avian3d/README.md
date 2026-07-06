@@ -28,23 +28,19 @@ projectile life, and team-based collision filtering.
 
 ## Dependencies
 
-Authoring abilities uses `bevy_gauge` and `bevy_gearbox` types and derive macros
-directly, so a consuming crate depends on them alongside `diesel_avian3d`. Pin
-the versions in the table below so a single copy of each resolves:
 
 ```toml
 [dependencies]
 diesel_avian3d = "0.2"
-bevy_gauge     = "0.5"
-bevy_gearbox   = "0.8"
+bevy_diesel    = "0.4"
 avian3d        = "0.7"
 ```
 
 ## Version Table
 
-| Bevy | diesel_avian3d | bevy_diesel | bevy_gauge | bevy_gearbox | Avian |
-| ---- | -------------- | ----------- | ---------- | ------------ | ----- |
-| 0.19 | 0.2            | 0.4         | 0.5        | 0.8          | 0.7   |
+| Bevy | diesel_avian3d | bevy_diesel | Avian |
+| ---- | -------------- | ----------- | ----- |
+| 0.19 | 0.2            | 0.4         | 0.7   |
 
 ## License
 

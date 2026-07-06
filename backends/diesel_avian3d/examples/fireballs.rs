@@ -16,10 +16,7 @@ use avian3d::prelude::*;
 use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use bevy_gauge::{attributes, instant};
-use bevy_gearbox::prelude::*;
 // `Target` (gearbox's transition target) is aliased to `DieselTarget` for
-// diesel's position-target to avoid the name clash.
 use diesel_avian3d::bevy_diesel::target::Target as DieselTarget;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;

@@ -8,17 +8,16 @@
 //! next; `.chain()` ordering resolves the whole pipeline in a single frame -
 //! no fixpoint loop, because each stage is a distinct type.
 //!
-//! `submit_propagation_for!` registers each type's buffer and its subscription
-//! graph, so a parent state machine can subscribe to a defender's combat events
-//! (forwarded copies arrive the following frame - the one ergonomic cost versus
-//! the old immediate-observer model).
+//! Deriving `PropagatedMessage` registers each type's buffer and its
+//! subscription graph, so a parent state machine can subscribe to a defender's
+//! combat events (forwarded copies arrive the following frame - the one
+//! ergonomic cost versus the old immediate-observer model).
 //!
 //! This is a PATTERN - copy and adapt it. Diesel provides the message plumbing;
 //! you define the events, defense formulas, and resolution logic.
 
 use bevy::prelude::*;
 use bevy_diesel::prelude::*;
-use bevy_diesel::submit_propagation_for;
 use bevy_gearbox::{GearboxPlugin, GearboxSet};
 
 // ============================================================================
@@ -26,63 +25,44 @@ use bevy_gearbox::{GearboxPlugin, GearboxSet};
 // ============================================================================
 
 /// Initial attack. Written by abilities that strike a defender.
-#[derive(Message, Clone, Reflect)]
+#[derive(Message, Clone, Reflect, PropagatedMessage)]
 pub struct Attack {
+    #[propagate(target)]
     pub defender: Entity,
     pub attacker: Entity,
     pub ability: Entity,
     pub element: String,
 }
-impl PropagatedMessage for Attack {
-    fn target(&self) -> Entity { self.defender }
-    fn set_target(&mut self, e: Entity) { self.defender = e; }
-}
 
 /// Post-defense hit. Written after the attack is evaluated.
-#[derive(Message, Clone, Reflect)]
+#[derive(Message, Clone, Reflect, PropagatedMessage)]
 pub struct Hit {
+    #[propagate(target)]
     pub defender: Entity,
     pub attacker: Entity,
     pub ability: Entity,
     pub element: String,
     pub hit_value: f32,
 }
-impl PropagatedMessage for Hit {
-    fn target(&self) -> Entity { self.defender }
-    fn set_target(&mut self, e: Entity) { self.defender = e; }
-}
 
 /// Final damage applied to health.
-#[derive(Message, Clone, Reflect)]
+#[derive(Message, Clone, Reflect, PropagatedMessage)]
 pub struct Damage {
+    #[propagate(target)]
     pub defender: Entity,
     pub attacker: Entity,
     pub ability: Entity,
     pub element: String,
     pub amount: f32,
 }
-impl PropagatedMessage for Damage {
-    fn target(&self) -> Entity { self.defender }
-    fn set_target(&mut self, e: Entity) { self.defender = e; }
-}
 
 /// Entity was killed.
-#[derive(Message, Clone, Reflect)]
+#[derive(Message, Clone, Reflect, PropagatedMessage)]
 pub struct Killed {
+    #[propagate(target)]
     pub defender: Entity,
     pub attacker: Entity,
 }
-impl PropagatedMessage for Killed {
-    fn target(&self) -> Entity { self.defender }
-    fn set_target(&mut self, e: Entity) { self.defender = e; }
-}
-
-// Register each message's buffer + subscription graph so parent machines can
-// subscribe to these events.
-submit_propagation_for!(Attack);
-submit_propagation_for!(Hit);
-submit_propagation_for!(Damage);
-submit_propagation_for!(Killed);
 
 // ============================================================================
 // Step 2: Defense components (user-defined)
@@ -207,7 +187,7 @@ pub struct DamagePipelinePlugin;
 impl Plugin for DamagePipelinePlugin {
     fn build(&self, app: &mut App) {
         // Registers the message buffers, subscription graphs, and
-        // `propagate_message::<T>` systems for every `submit_propagation_for!`.
+        // `propagate_message::<T>` systems for every `#[derive(PropagatedMessage)]`.
         bevy_diesel::propagation::plugin(app);
 
         // Stage systems, ordered so a fired Attack resolves all the way to
