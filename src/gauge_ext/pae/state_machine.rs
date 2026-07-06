@@ -62,14 +62,13 @@ impl RequirementsOf {
 }
 
 /// Relationship: "this entity requires stats from that entity."
-#[derive(Component, Clone, PartialEq, Eq, Debug, Reflect)]
+#[derive(Component, Clone, PartialEq, Eq, Debug, Reflect, FromTemplate)]
 #[relationship(relationship_target = RequirementsOf)]
-#[reflect(Component, PartialEq, Debug, FromWorld, Clone)]
+#[reflect(Component, PartialEq, Debug, Default, Clone)]
 pub struct RequiresStatsOf(#[entities] pub Entity);
 
-impl FromWorld for RequiresStatsOf {
-    #[inline(always)]
-    fn from_world(_world: &mut World) -> Self {
+impl Default for RequiresStatsOf {
+    fn default() -> Self {
         RequiresStatsOf(Entity::PLACEHOLDER)
     }
 }

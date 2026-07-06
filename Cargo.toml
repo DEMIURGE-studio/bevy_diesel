@@ -1,6 +1,6 @@
 [package]
 name = "bevy_diesel"
-version = "0.4.0"
+version = "0.2.0"
 edition = "2024"
 description = "A generic ability engine framework for Bevy"
 license = "MIT OR Apache-2.0"
@@ -19,7 +19,7 @@ rand = "0.9"
 inventory = "0.3"
 bevy_gauge = "0.5"
 bevy_gearbox = { version = "0.8", default-features = false, features = ["gauge"] }
-bevy_diesel_macros = { version = "0.4.0", path = "crates/macros" }
+bevy_diesel_macros = { version = "0.2.0", path = "crates/macros" }
 
 [features]
 default = []
