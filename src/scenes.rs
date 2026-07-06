@@ -78,11 +78,11 @@ where
             })
         Substates [
             #Ready Transitions [
-                (Target(#Invoking) MessageEdge::<StartInvoke<P>>::default())
+                (Target(#Invoking) MessageEdge::<StartInvoke<P>>)
             ],
 
             #Invoking InitialState(#Inner) Transitions [
-                (Target(#Cooldown) MessageEdge::<Done>::default())
+                (Target(#Cooldown) MessageEdge::<Done>)
             ] Substates [
                 #Inner make_inner(#Ability)
             ],
@@ -127,7 +127,7 @@ where
             template(move |_| Ok(bevy_gauge::attributes! { "RepeatCount" => count_expr }))
         Substates [
             #Idle Transitions [
-                (Target(#Fire) MessageEdge::<OnRepeat<P>>::default())
+                (Target(#Fire) MessageEdge::<OnRepeat<P>>)
             ],
             #Fire InvokedBy(root) { on_fire }
             Transitions [

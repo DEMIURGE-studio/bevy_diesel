@@ -121,13 +121,23 @@ impl<B: SpatialBackend> Plugin for DieselCorePlugin<B> {
         app.configure_sets(bevy_gearbox::GearboxSchedule, (
             crate::DieselSet::Propagation
                 .after(bevy_gearbox::GearboxPhase::EntryPhase),
-            crate::DieselSet::Effects
+            crate::DieselSet::TargetFilter
                 .after(crate::DieselSet::Propagation),
+            crate::DieselSet::Effects
+                .after(crate::DieselSet::TargetFilter),
             crate::DieselSet::AttributeEffects
                 .in_set(crate::DieselSet::Effects),
             bevy_gearbox::GearboxPhase::GaugeSync
                 .after(crate::DieselSet::Effects),
         ));
+
+        app.init_resource::<crate::effect::PendingGoOffs<B::Pos>>();
+        app.add_systems(
+            bevy_gearbox::GearboxSchedule,
+            crate::pipeline::flush_go_offs::<B::Pos>
+                .after(crate::DieselSet::TargetFilter)
+                .before(crate::DieselSet::Effects),
+        );
         app.add_systems(bevy_gearbox::GearboxSchedule, (
             ApplyDeferred
                 .after(crate::DieselSet::Propagation)

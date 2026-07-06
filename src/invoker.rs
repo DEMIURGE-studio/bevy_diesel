@@ -6,7 +6,7 @@ use bevy_gauge::prelude::{Attributes, AttributesMut};
 // ---------------------------------------------------------------------------
 
 /// Relationship target: collection of abilities/effects invoked by this entity.
-#[derive(Component, Default, Debug, PartialEq, Eq)]
+#[derive(Component, Default, Clone, Debug, PartialEq, Eq)]
 #[relationship_target(relationship = InvokedBy, linked_spawn)]
 pub struct Invokes(Vec<Entity>);
 
@@ -17,12 +17,6 @@ impl<'a> IntoIterator for &'a Invokes {
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
-    }
-}
-
-impl Invokes {
-    pub fn new() -> Self {
-        Self(Vec::new())
     }
 }
 

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::backend::SpatialBackend;
 use crate::diagnostics::diesel_debug;
-use crate::effect::{GoOff, GoOffOrigin, SubEffects};
+use crate::effect::{GoOff, GoOffOrigin, PendingGoOffs, SubEffects};
 use crate::invoker::{InvokedBy, resolve_invoker, resolve_root};
 use crate::target::{Scope, InvokerTarget, Target, TargetGenerator, TargetMutator, TargetType};
 
@@ -82,7 +82,7 @@ pub fn propagate_system<B: SpatialBackend>(
     q_invoker: Query<&InvokedBy>,
     q_substate_of: Query<&bevy_gearbox::SubstateOf>,
     q_invoker_target: Query<&InvokerTarget<B::Pos>>,
-    mut writer: MessageWriter<GoOff<B::Pos>>,
+    mut pending: ResMut<PendingGoOffs<B::Pos>>,
 ) {
     for origin in reader.read() {
         let root_entity = origin.entity;
@@ -130,7 +130,7 @@ pub fn propagate_system<B: SpatialBackend>(
 
         // Fire GoOff on the root entity itself (one per resolved target).
         for (target, scope) in &root_targets {
-            writer.write(GoOff::with_scope(root_entity, *target, scope.clone()));
+            pending.items.push(GoOff::with_scope(root_entity, *target, scope.clone()));
         }
 
         // Walk the tree: (entity, (target, scope) pairs for this entity)
@@ -178,7 +178,7 @@ pub fn propagate_system<B: SpatialBackend>(
                 // Write one GoOff per (target, scope) pair.
                 diesel_debug!("[diesel]   -> writing GoOff for child {:?}, {} targets", child, out_targets.len());
                 for (target, scope) in &out_targets {
-                    writer.write(GoOff::with_scope(child, *target, scope.clone()));
+                    pending.items.push(GoOff::with_scope(child, *target, scope.clone()));
                 }
                 stack.push((child, out_targets));
             }
@@ -188,6 +188,20 @@ pub fn propagate_system<B: SpatialBackend>(
 
 // Alias for callers referencing the name `propagate_observer`.
 pub use propagate_system as propagate_observer;
+
+/// Drains [`PendingGoOffs`] into [`GoOff`] messages. Runs after
+/// [`DieselSet::TargetFilter`](crate::DieselSet::TargetFilter) so that only the
+/// targets which survived filtering are emitted, and before
+/// [`DieselSet::Effects`](crate::DieselSet::Effects) so leaf systems see them
+/// this tick.
+pub fn flush_go_offs<P: Clone + Copy + Send + Sync + Default + std::fmt::Debug + 'static>(
+    mut pending: ResMut<PendingGoOffs<P>>,
+    mut writer: MessageWriter<GoOff<P>>,
+) {
+    for go_off in pending.items.drain(..) {
+        writer.write(go_off);
+    }
+}
 
 /// Add `parent_scope` keys to each target's scope; existing keys win.
 fn merge_scope_into_targets<P: Clone + Copy + Send + Sync + Default + std::fmt::Debug + 'static>(

@@ -87,6 +87,21 @@ impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> GoOff<P> {
 }
 
 // ---------------------------------------------------------------------------
+// PendingGoOffs<P>: buffered resolved go-offs awaiting target filtering
+// ---------------------------------------------------------------------------
+
+#[derive(Resource)]
+pub struct PendingGoOffs<P: Clone + Copy + Send + Sync + Default + Debug + 'static> {
+    pub items: Vec<GoOff<P>>,
+}
+
+impl<P: Clone + Copy + Send + Sync + Default + Debug + 'static> Default for PendingGoOffs<P> {
+    fn default() -> Self {
+        Self { items: Vec::new() }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SubEffectOf / SubEffects
 // ---------------------------------------------------------------------------
 

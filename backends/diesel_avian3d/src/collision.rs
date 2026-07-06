@@ -229,7 +229,56 @@ impl<F: CollisionFilter> Default for CollisionFilterPlugin<F> {
 impl<F: CollisionFilter> Plugin for CollisionFilterPlugin<F> {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, filtered_collision_system::<F>);
+        app.add_systems(
+            bevy_gearbox::GearboxSchedule,
+            filter_pending_go_offs::<F>.in_set(bevy_diesel::DieselSet::TargetFilter),
+        );
     }
+}
+
+/// Walk the `InvokedBy` chain from `start` to the first entity carrying the
+/// filter `F` (the ability root). `None` = no filter on this effect's ability.
+fn find_ability_filter<'a, F: CollisionFilter>(
+    start: Entity,
+    q_invoker: &Query<&InvokedBy>,
+    q_filter: &'a Query<&F>,
+) -> Option<&'a F> {
+    let mut entity = start;
+    loop {
+        if let Ok(filter) = q_filter.get(entity) {
+            return Some(filter);
+        }
+        match q_invoker.get(entity) {
+            Ok(invoked_by) => entity = invoked_by.0,
+            Err(_) => return None,
+        }
+    }
+}
+
+/// `DieselSet::TargetFilter` system: retain only the buffered `(effect, target)`
+/// pairs that the effect's ability-level filter `F` allows. Position-only
+/// targets and effects whose ability carries no `F` pass through untouched.
+fn filter_pending_go_offs<F: CollisionFilter>(
+    mut pending: ResMut<PendingGoOffs<Vec3>>,
+    q_filter: Query<&F>,
+    q_lookup: Query<&F::Lookup>,
+    q_invoker: Query<&InvokedBy>,
+) {
+    if pending.items.is_empty() {
+        return;
+    }
+    pending.items.retain(|go_off| {
+        let Some(target) = go_off.target.entity else {
+            return true;
+        };
+        let Some(filter) = find_ability_filter::<F>(go_off.entity, &q_invoker, &q_filter) else {
+            return true;
+        };
+        let invoker = q_invoker.root_ancestor(go_off.entity);
+        let invoker_data = q_lookup.get(invoker).ok();
+        let target_data = q_lookup.get(target).ok();
+        filter.can_target(invoker_data, target_data)
+    });
 }
 
 fn filtered_collision_system<F: CollisionFilter>(

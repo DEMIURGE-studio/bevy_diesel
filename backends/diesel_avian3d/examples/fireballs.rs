@@ -164,7 +164,7 @@ fn explosive_projectile() -> impl Scene {
             StateMachine InitialState(#Flying)
         Substates [
             #Flying Transitions [
-                (Target(#Hit) MessageEdge::<CollidedEntity>::default())
+                (Target(#Hit) MessageEdge::<CollidedEntity>)
             ],
 
             #Hit Substates [
@@ -237,7 +237,7 @@ fn firestorm_zone() -> impl Scene {
             template(|ctx| Ok(MeshMaterial3d(ctx.resource::<VisualAssets>().zone_material.clone())))
             StateMachine InitialState(#RepeaterSlot)
             Transitions [
-                (Target(#Done) MessageEdge::<Done>::default())
+                (Target(#Done) MessageEdge::<Done>)
             ]
         Substates [
             // The repeater sub-chart merges onto this slot (its root carries
@@ -452,7 +452,7 @@ fn main() {
             PhysicsPlugins::default(),
             MeshPickingPlugin,
             AvianBackend::plugin(),
-            CollisionFilterPlugin::<TeamFilter>::default(),
+            CollisionFilterPlugin::<TeamFilter>,
         ))
         // setup_assets + register_templates before setup (which spawns scenes).
         .add_systems(Startup, (setup_assets, register_templates, setup).chain())

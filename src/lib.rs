@@ -40,8 +40,10 @@ pub use bevy_diesel_macros::PropagatedMessage;
 /// ```
 #[derive(bevy::prelude::SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DieselSet {
-    /// Propagation: reads [`GoOffOrigin`], walks tree, writes [`GoOff`].
+    /// Propagation: reads [`GoOffOrigin`], walks tree, buffers resolved
+    /// `(effect, target)` pairs into [`PendingGoOffs`](crate::effect::PendingGoOffs).
     Propagation,
+    TargetFilter,
     /// Leaf effect systems that consume [`GoOff`].
     Effects,
     /// Subset of Effects: systems that mutate attributes (instant, modifiers).
@@ -61,10 +63,10 @@ pub mod prelude {
     pub use crate::target::{
         Scope, InvokerTarget, TargetGenerator, TargetMutator, TargetType,
     };
-    pub use crate::effect::{GoOff, GoOffConfig, SubEffectOf, SubEffects};
+    pub use crate::effect::{GoOff, GoOffConfig, PendingGoOffs, SubEffectOf, SubEffects};
     pub use crate::events::{StartInvoke, StopInvoke, OnRepeat};
     pub use crate::invoker::{InvokedBy, Invokes, resolve_invoker, resolve_root};
-    pub use crate::pipeline::{generate_targets, propagate_observer};
+    pub use crate::pipeline::{flush_go_offs, generate_targets, propagate_observer};
     pub use crate::print::PrintLn;
     pub use crate::spawn::{
         OnSpawnInvoker, OnSpawnOrigin, OnSpawnTarget,

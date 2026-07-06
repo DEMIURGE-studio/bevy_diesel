@@ -93,7 +93,7 @@ fn explosive_projectile() -> impl Scene {
             StateMachine InitialState(#Flying)
         Substates [
             #Flying Transitions [
-                (Target(#Hit) MessageEdge::<CollidedEntity>::default())
+                (Target(#Hit) MessageEdge::<CollidedEntity>)
             ],
             #Hit Substates [
                 (SubEffectOf(#Hit) InvokedBy(#Root) SpawnConfig::passed("explosion"))
