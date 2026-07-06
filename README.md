@@ -147,7 +147,7 @@ bevy_diesel = "0.4"
 
 | Bevy | Diesel | bundled bevy_gauge | bundled bevy_gearbox |
 | ---- | ------ | ------------------ | -------------------- |
-| 0.19 | 0.4    | 0.5                | 0.8                  |
+| 0.19 | 0.2    | 0.5                | 0.8                  |
 
 The gauge/gearbox versions are what `bevy_diesel 0.4` pulls in transitively -
 listed for reference only; you don't declare them.

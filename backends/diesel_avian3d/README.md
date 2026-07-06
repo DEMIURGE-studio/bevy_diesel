@@ -32,7 +32,7 @@ projectile life, and team-based collision filtering.
 ```toml
 [dependencies]
 diesel_avian3d = "0.2"
-bevy_diesel    = "0.4"
+bevy_diesel    = "0.2"
 avian3d        = "0.7"
 ```
 
@@ -40,7 +40,7 @@ avian3d        = "0.7"
 
 | Bevy | diesel_avian3d | bevy_diesel | Avian |
 | ---- | -------------- | ----------- | ----- |
-| 0.19 | 0.2            | 0.4         | 0.7   |
+| 0.19 | 0.2            | 0.2         | 0.7   |
 
 ## License
 
