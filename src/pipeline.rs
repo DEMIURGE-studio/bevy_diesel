@@ -59,7 +59,7 @@ pub fn generate_targets<B: SpatialBackend>(
         }
         Some(gatherer) => {
             // Delegated to backend; it attaches per-target scope.
-            B::gather(ctx, offset_target.position, gatherer, invoker)
+            B::gather(ctx, offset_target.position, gatherer, invoker, root)
         }
     };
 

@@ -161,6 +161,9 @@ pub mod prelude {
 pub struct AvianContext<'w, 's> {
     pub spatial_query: SpatialQuery<'w, 's>,
     pub transforms: Query<'w, 's, &'static Transform>,
+    /// Collision layers of gathering roots: entity gatherers only consider
+    /// entities the root's `CollisionLayers` filters allow.
+    layers: Query<'w, 's, &'static CollisionLayers>,
     global_transforms: Query<'w, 's, &'static GlobalTransform>,
     rng: Local<'s, SplitMix64>,
 }
@@ -196,7 +199,16 @@ impl SpatialBackend for AvianBackend {
         origin: Vec3,
         gatherer: &AvianGatherer,
         exclude: Entity,
+        root: Entity,
     ) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> {
+        // A gathering root with `CollisionLayers` (e.g. an explosion on the
+        // projectile layer that collides with characters) only gathers what its
+        // filters allow, so terrain and projectiles don't use up target counts.
+        let query_filter = ctx
+            .layers
+            .get(root)
+            .map(|layers| SpatialQueryFilter::from_mask(layers.filters))
+            .unwrap_or_default();
         match gatherer {
             // Position generators: read embedded count, produce N points
             AvianGatherer::Sphere { radius, count } => {
@@ -289,6 +301,7 @@ impl SpatialBackend for AvianBackend {
                 &ctx.spatial_query,
                 exclude,
                 &ctx.transforms,
+                &query_filter,
             ),
             AvianGatherer::NearestEntities(radius) => {
                 let mut targets = find_entities_in_radius(
@@ -297,6 +310,7 @@ impl SpatialBackend for AvianBackend {
                     &ctx.spatial_query,
                     exclude,
                     &ctx.transforms,
+                    &query_filter,
                 );
                 sort_by_distance(&mut targets, &origin);
                 // Rewrite rank once order is stable.
@@ -535,6 +549,7 @@ fn find_entities_in_radius(
     spatial_query: &SpatialQuery,
     exclude: Entity,
     q_transform: &Query<&Transform>,
+    query_filter: &SpatialQueryFilter,
 ) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> {
     let hits = spatial_query.shape_hits(
         &Collider::sphere(radius),
@@ -543,7 +558,7 @@ fn find_entities_in_radius(
         Dir3::Y,
         100,
         &ShapeCastConfig::default(),
-        &SpatialQueryFilter::default(),
+        query_filter,
     );
 
     let mut out: Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> = hits

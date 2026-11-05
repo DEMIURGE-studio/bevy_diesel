@@ -57,11 +57,16 @@ pub trait SpatialBackend: Send + Sync + 'static {
     fn position_of(ctx: &Self::Context<'_, '_>, entity: Entity) -> Option<Self::Pos>;
 
     /// Gather targets around a position.
+    ///
+    /// `exclude` is the invoker, which is never gathered. `root` is the
+    /// state-machine root of the effect doing the gathering (e.g. an explosion);
+    /// backends may use it to scope the query, such as by its collision layers.
     fn gather(
         ctx: &mut Self::Context<'_, '_>,
         origin: Self::Pos,
         gatherer: &Self::Gatherer,
         exclude: Entity,
+        root: Entity,
     ) -> Vec<(Target<Self::Pos>, Scope)>;
 
     /// Filter gathered targets (count limits, line-of-sight, etc.).
