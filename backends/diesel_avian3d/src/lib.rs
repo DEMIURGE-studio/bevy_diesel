@@ -303,6 +303,10 @@ impl SpatialBackend for AvianBackend {
                 &ctx.transforms,
                 &query_filter,
             ),
+            AvianGatherer::EntitiesOnSegment(radius) => {
+                let from = ctx.transforms.get(exclude).map(|t| t.translation).unwrap_or(origin);
+                find_entities_on_segment(from, origin, *radius, &ctx.spatial_query, exclude, &ctx.transforms, &query_filter)
+            }
             AvianGatherer::NearestEntities(radius) => {
                 let mut targets = find_entities_in_radius(
                     origin,
@@ -457,6 +461,9 @@ pub enum AvianGatherer {
     NearestEntities(f32),
     /// Entities in radius, unsorted. Count cap via reservoir sampling in filter.
     AllEntitiesInRadius(f32),
+    /// Entities within this distance of the segment from the invoker to the
+    /// origin (a bolt between them), nearest the invoker first.
+    EntitiesOnSegment(f32),
 }
 
 // ---------------------------------------------------------------------------
@@ -582,6 +589,41 @@ fn find_entities_in_radius(
         })
         .collect();
 
+    let total = out.len() as f32;
+    for (i, (_, scope)) in out.iter_mut().enumerate() {
+        scope.push(("Rank@scope", i as f32));
+        scope.push(("GatherCount@scope", total));
+    }
+    out
+}
+
+/// Entities within `radius` of the segment `from`..`to`, nearest `from`
+/// first.
+fn find_entities_on_segment(
+    from: Vec3,
+    to: Vec3,
+    radius: f32,
+    spatial_query: &SpatialQuery,
+    exclude: Entity,
+    q_transform: &Query<&Transform>,
+    query_filter: &SpatialQueryFilter,
+) -> Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> {
+    let shape = if from.distance(to) < 1e-3 {
+        Collider::sphere(radius)
+    } else {
+        Collider::capsule_endpoints(radius, from - to, Vec3::ZERO)
+    };
+    let mut out: Vec<(bevy_diesel::target::Target<Vec3>, bevy_diesel::target::Scope)> = spatial_query
+        .shape_intersections(&shape, to, Quat::IDENTITY, query_filter)
+        .into_iter()
+        .filter(|e| *e != exclude)
+        .map(|e| {
+            let position = q_transform.get(e).map(|t| t.translation).unwrap_or(to);
+            let distance = position.distance(from);
+            (bevy_diesel::target::Target::entity(e, position), vec![("OriginDistance@scope", distance), ("Radius@scope", radius)])
+        })
+        .collect();
+    out.sort_by(|a, b| a.0.position.distance(from).total_cmp(&b.0.position.distance(from)));
     let total = out.len() as f32;
     for (i, (_, scope)) in out.iter_mut().enumerate() {
         scope.push(("Rank@scope", i as f32));
